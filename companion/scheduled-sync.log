@@ -1,0 +1,19 @@
+[2026-05-08 14:10:25] ------------------------------------------------------------
+[2026-05-08 14:10:25] Scheduled sync starting.
+[2026-05-08 14:10:25] Working directory: C:\Scripts\synchro
+[2026-05-08 14:10:25] Config file: C:\Scripts\synchro\companion\.env
+[2026-05-08 14:10:25] Log file: C:\Scripts\synchro\companion\scheduled-sync.log
+[2026-05-08 14:10:25] Server: http://localhost:3000
+[2026-05-08 14:10:25] Endpoint: viewer-scope-endpoint
+[2026-05-08 14:10:25] Folder: c:\Scripts\synchro\companion\verifone-sample
+[2026-05-08 14:10:25] Profile: Verifone Commander (verifone_commander)
+[2026-05-08 14:10:29] Matched files: 2
+[2026-05-08 14:10:29] Scheduled sync finished: 0/2 files uploaded.
+[2026-05-08 14:10:29] 401 index.html
+[2026-05-08 14:10:29] Response: {
+  "error": "Invalid or missing API key."
+}
+[2026-05-08 14:10:29] 401 menus/daily.htm
+[2026-05-08 14:10:29] Response: {
+  "error": "Invalid or missing API key."
+}

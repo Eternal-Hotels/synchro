@@ -1,0 +1,31 @@
+erDiagram
+    users {
+        TEXT id PK "UUID v4"
+        TEXT username UK "COLLATE NOCASE"
+        TEXT role "api_manager OR viewer"
+        INTEGER disabled "0 or 1"
+        TEXT password_salt
+        TEXT password_hash "scrypt-derived 64-byte hex"
+        TEXT created_at "ISO 8601"
+    }
+
+    endpoint_keys {
+        TEXT slug PK "URL-safe name e.g. warehouse-laptop"
+        TEXT name "Human-readable display name"
+        TEXT api_key "Non-secret placeholder only"
+        TEXT api_key_hash "scrypt-derived 64-byte hex"
+        TEXT api_key_salt
+        INTEGER revoked "0 or 1"
+        TEXT created_at "ISO 8601"
+        TEXT last_used_at "ISO 8601 or NULL"
+        TEXT rotated_at "ISO 8601 or NULL"
+        INTEGER rotation_count
+    }
+
+    user_endpoint_scopes {
+        TEXT user_id FK
+        TEXT endpoint_slug FK
+    }
+
+    users ||--o{ user_endpoint_scopes : "viewer scopes"
+    endpoint_keys ||--o{ user_endpoint_scopes : "scoped to"

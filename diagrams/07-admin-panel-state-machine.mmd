@@ -1,0 +1,12 @@
+stateDiagram-v2
+    [*] --> CheckingSession: page load GET /api/session/me
+    CheckingSession --> LoggedOut: 401 response
+    CheckingSession --> LoggedIn: 200 response
+    LoggedOut --> LoggedIn: POST /api/session/login success
+    LoggedIn --> LoggedOut: POST /api/session/logout
+    LoggedIn --> KeysTab: default view
+    LoggedIn --> UsersTab: only api_manager role
+    KeysTab --> ExplorerModal: click Open Explorer
+    ExplorerModal --> KeysTab: close modal
+    KeysTab --> KeysTab: create / revoke / restore / rotate / delete key
+    UsersTab --> UsersTab: create / enable / disable / delete user

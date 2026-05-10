@@ -1,0 +1,57 @@
+graph TB
+    subgraph Client["Client Machine (Python Companion)"]
+        CLI["uploader.py\nCLI tool"]
+        GUI["gui.py\nTkinter desktop app"]
+        SC["sync_client.py\nShared logic library"]
+        ENV[".env file\nSaved credentials"]
+        CLI --> SC
+        GUI --> SC
+        SC <--> ENV
+    end
+
+    subgraph Server["Node.js Server (src/)"]
+        HTTP["http.createServer\nserver.js"]
+        subgraph Routes["Route Handlers"]
+            UI_R["ui.js\nGET /\nGET /app.js\nGET /app.css"]
+            SESSION_R["session.js\nPOST /api/session/login\nPOST /api/session/logout\nGET /api/session/me"]
+            ADMIN_R["admin.js\nGET|POST /api/admin/keys\nPOST /api/admin/keys/:s/revoke\nPOST /api/admin/keys/:s/restore\nPOST /api/admin/keys/:s/rotate\nGET /api/admin/keys/:s/browse\nDELETE /api/admin/keys/:s\nGET|POST /api/admin/users\nPATCH|DELETE /api/admin/users/:id"]
+            UPLOAD_R["upload.js\nPOST /api/upload/:slug"]
+        end
+        subgraph Services["Services"]
+            SM["session-manager.js\nIn-memory session Map"]
+            STOR["storage.js\nSQLite + disk I/O"]
+            US["upload-service.js\nMultipart parser\nFile writer\nFile streamer"]
+        end
+        subgraph Utils["Utilities"]
+            SEC["security.js\nscrypt hashing"]
+            FILES["files.js\nPath sanitization"]
+            HTTPU["http.js\nCookie / JSON helpers"]
+        end
+        HTTP --> Routes
+        Routes --> SM
+        Routes --> STOR
+        Routes --> US
+        SM --> STOR
+        SM --> SEC
+        US --> STOR
+        US --> FILES
+        STOR --> SEC
+        STOR --> FILES
+    end
+
+    subgraph Storage["Persistent Storage"]
+        DB[("synchro.sqlite\nusers\nendpoint_keys\nuser_endpoint_scopes")]
+        DISK["storage/<slug>/\nUploaded files on disk"]
+    end
+
+    subgraph Browser["Admin Browser"]
+        PANEL["admin-panel.html\nSingle-page app"]
+        JS["admin-client.js\nVanilla JS state machine"]
+        PANEL --> JS
+    end
+
+    SC -- "POST /api/upload/:slug\nX-API-Key header\nmultipart/form-data body" --> HTTP
+    Browser -- "HTTP requests\n(session cookie)" --> HTTP
+    HTTP -- "Serves HTML/JS/CSS" --> Browser
+    STOR <--> DB
+    US <--> DISK

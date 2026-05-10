@@ -1,0 +1,124 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Synchro Admin</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">Upload Control Panel</div>
+        <h1>Synchro ERM</h1>
+        <p class="subhead">Endpoint Report Manager for Gilbarco and Verifone POS</p>
+      </div>
+      <div id="user-pill" class="user-pill">
+        <span id="user-label"></span>
+        <button id="logout-button" class="secondary">Log Out</button>
+      </div>
+    </section>
+
+    <section id="auth-view" class="panel auth-wrap">
+      <div class="auth-grid">
+        <h2>Admin Sign In</h2>
+        <p class="subhead">Use a Synchro account to manage endpoint keys or review uploaded files.</p>
+        <label>
+          Username
+          <input id="login-username" autocomplete="username">
+        </label>
+        <label>
+          Password
+          <input id="login-password" type="password" autocomplete="current-password">
+        </label>
+        <div class="toolbar-row">
+          <button id="login-button" class="primary">Sign In</button>
+        </div>
+        <div id="auth-status" class="status"></div>
+      </div>
+    </section>
+
+    <section id="app-view" class="hidden stack">
+      <div class="panel">
+        <div class="toolbar">
+          <div class="tabs">
+            <button id="tab-keys" class="tab active">Endpoints</button>
+            <button id="tab-users" class="tab hidden">Users</button>
+          </div>
+          <div class="toolbar-row">
+            <button id="refresh-button" class="secondary">Refresh</button>
+          </div>
+        </div>
+        <div id="app-status" class="status"></div>
+      </div>
+
+      <section id="keys-view" class="panel">
+        <div id="key-create-panel" class="form-grid hidden">
+          <label>
+            Endpoint Name
+            <input id="key-name" placeholder="warehouse-laptop">
+          </label>
+          <div class="toolbar-row" style="align-self:end;">
+            <button id="create-key-button" class="primary">Create Endpoint Key</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="key-list" class="grid"></div>
+        </div>
+      </section>
+
+      <section id="users-view" class="panel hidden">
+        <div class="form-grid">
+          <label>
+            Username
+            <input id="new-username" placeholder="alex">
+          </label>
+          <label>
+            Password
+            <input id="new-password" type="password" placeholder="Choose a password">
+          </label>
+          <label>
+            Access Level
+            <select id="new-role">
+              <option value="api_manager">API Manager</option>
+              <option value="viewer">Viewer</option>
+            </select>
+          </label>
+          <label id="scope-field">
+            Viewer Endpoint Access
+            <div id="endpoint-scope-list" class="checkbox-list"></div>
+            <div class="hint">Viewers need at least one endpoint. Managers automatically see all endpoints and can edit keys.</div>
+          </label>
+          <div class="toolbar-row" style="align-self:end;">
+            <button id="create-user-button" class="primary">Create User</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="user-list" class="grid"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+  <div id="explorer-modal" class="explorer-modal" aria-hidden="true">
+    <div class="explorer-shell">
+      <div class="explorer-head">
+        <div>
+          <h2 id="explorer-title">Endpoint Explorer</h2>
+          <p id="explorer-subtitle" class="subhead">Browse folders and download files.</p>
+        </div>
+        <button id="explorer-close" class="secondary">Close</button>
+      </div>
+      <div class="explorer-tools">
+        <button id="explorer-up" class="secondary">Up One Level</button>
+        <div id="explorer-crumbs" class="crumbs"></div>
+      </div>
+      <div class="explorer-body">
+        <div id="explorer-status" class="status"></div>
+        <div id="explorer-list" class="explorer-list"></div>
+      </div>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

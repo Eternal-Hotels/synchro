@@ -1,0 +1,8 @@
+data/keys.json
+data/users.json
+data/synchro.sqlite
+data/synchro.sqlite-shm
+data/synchro.sqlite-wal
+storage/
+companion/.env
+companion/test.txt

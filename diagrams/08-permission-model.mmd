@@ -1,0 +1,13 @@
+graph LR
+    subgraph Roles
+        AM[api_manager]
+        V[viewer]
+    end
+    subgraph Permissions
+        MK[manageKeys\ncreate, revoke, restore, rotate, delete endpoints]
+        MU[manageUsers\ncreate, disable, enable, delete users]
+        ES[endpointScopes\nread-only access to specific endpoint folders]
+    end
+    AM --> MK
+    AM --> MU
+    V --> ES

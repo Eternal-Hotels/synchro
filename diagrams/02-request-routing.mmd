@@ -1,0 +1,26 @@
+flowchart TD
+    REQ([Incoming HTTP Request]) --> PRUNE[Prune expired sessions\nfrom in-memory Map]
+    PRUNE --> PARSE[Parse URL pathname\nand decode percent-encoding]
+    PARSE --> UI{tryHandleUiRoute?\nGET / or /app.js or /app.css}
+    UI -- yes --> SERVE_HTML[Send HTML / JS / CSS file\nfrom src/ui/]
+    UI -- no --> SESSION{tryHandleSessionRoute?\n/api/session/**}
+    SESSION -- yes --> SESSION_WORK[Login / Logout / Me]
+    SESSION -- no --> ADMIN{tryHandleAdminRoute?\n/api/admin/**}
+    ADMIN -- yes --> AUTH{requireSession\nvalid cookie?}
+    AUTH -- no --> E401[401 Unauthorized]
+    AUTH -- yes --> PERM{assertPermission\nor assertEndpointAccess?}
+    PERM -- no --> E403[403 Forbidden]
+    PERM -- yes --> ADMIN_WORK[Key/User CRUD\nor file browse/download]
+    ADMIN -- no --> UPLOAD{tryHandleUploadRoute?\nPOST /api/upload/:slug}
+    UPLOAD -- yes --> KEY_CHECK{Find key by slug\nCheck revoked\nVerify API key hash}
+    KEY_CHECK -- invalid --> E401B[401 / 403 / 404]
+    KEY_CHECK -- valid --> PARSE_MULTI[Parse multipart body\nWrite file to disk]
+    UPLOAD -- no --> E404[404 Not Found]
+    SERVE_HTML --> RES([HTTP Response])
+    SESSION_WORK --> RES
+    ADMIN_WORK --> RES
+    PARSE_MULTI --> RES
+    E401 --> RES
+    E403 --> RES
+    E401B --> RES
+    E404 --> RES

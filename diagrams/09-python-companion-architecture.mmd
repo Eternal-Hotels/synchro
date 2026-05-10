@@ -1,0 +1,11 @@
+graph TB
+    subgraph Companion
+        UP["uploader.py\nCLI entry point\nargparse"]
+        GUI_PY["gui.py\nTkinter GUI\nRuns sync on background thread\nPolls log queue every 150ms"]
+        SC["sync_client.py\nShared library"]
+        ENV_FILE[".env file\nKEY=value pairs"]
+
+        UP -- "resolve_config()\nsync_folder()\nupload_file()" --> SC
+        GUI_PY -- "resolve_config()\nread_saved_config()\nsave_env()\nsync_folder()\nupload_file()\nensure_test_file()" --> SC
+        SC <-- "load_env()\nsave_env()" --> ENV_FILE
+    end

@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant OS as OS / npm start
+    participant SRV as server.js
+    participant CFG as config.js
+    participant STOR as storage.js
+    participant DB as synchro.sqlite
+
+    OS->>SRV: node src/server.js
+    SRV->>CFG: require("./config") — read env vars
+    SRV->>SRV: ensureDirectory(DATA_DIR)\nensureDirectory(STORAGE_DIR)
+    SRV->>SRV: createSessionManager(storage)
+    SRV->>STOR: initializeStorage()
+    STOR->>DB: openDatabase(DB_PATH)\nPRAGMA foreign_keys = ON
+    STOR->>DB: CREATE TABLE IF NOT EXISTS (3 tables)
+    STOR->>DB: migrateEndpointKeySchema() — safe column additions
+    STOR->>DB: importLegacyJsonData() — one-time JSON to SQLite migration
+    STOR-->>SRV: resolved
+    SRV->>STOR: ensureBootstrapAdmin()
+    STOR->>DB: SELECT COUNT(*) FROM users
+    DB-->>STOR: 0 rows (first run)
+    STOR->>DB: INSERT INTO users (bootstrap admin)
+    STOR-->>SRV: resolved
+    SRV->>SRV: server.listen(PORT, HOST, callback)
+    SRV->>OS: console.log("Synchro upload service listening on...")

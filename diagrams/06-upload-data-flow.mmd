@@ -1,0 +1,20 @@
+flowchart LR
+    subgraph Python["Python Companion"]
+        F[Local file\nor folder] --> SC[sync_client.py\nbuild_multipart_body]
+        SC --> HTTP[http.client\nHTTPConnection]
+    end
+
+    subgraph Wire["HTTP Wire"]
+        HTTP -- "POST /api/upload/:slug\nX-API-Key: key\nX-Relative-Path: a/b/file.html\nmultipart/form-data body" --> SERVER
+    end
+
+    subgraph Node["Node Server"]
+        SERVER[upload.js\nroute handler] --> AUTH[Verify API key\nwith scrypt]
+        AUTH --> PARSE[parseMultipartUpload\nbinary boundary split]
+        PARSE --> SANITIZE[sanitizeRelativePath\nstrip .., normalize]
+        SANITIZE --> WRITE[fs.writeFileSync\nstorage/:slug/:path]
+    end
+
+    subgraph FS["File System"]
+        WRITE --> RESULT["storage/\n  warehouse-laptop/\n    menus/\n      daily.htm\n    index.html"]
+    end

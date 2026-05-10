@@ -1,0 +1,147 @@
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Invalid username or password.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at loginUser (C:\Scripts\synchro\src\server.js:978:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:45:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  statusCode: 401
+}
+Error: Invalid username or password.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at loginUser (C:\Scripts\synchro\src\server.js:978:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:45:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: You do not have permission for this action.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at assertPermission (C:\Scripts\synchro\src\server.js:1017:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:71:7)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1198:18)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 403
+}
+Error: You do not have permission for this action.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at assertPermission (C:\Scripts\synchro\src\server.js:1017:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:123:7)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1198:18)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 403
+}
+Error: Invalid username or password.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at loginUser (C:\Scripts\synchro\src\server.js:973:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:45:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:65:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:70:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1198:18)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: You do not have permission for this action.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at assertPermission (C:\Scripts\synchro\src\server.js:1017:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:117:7)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 403
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: Please sign in.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at requireSession (C:\Scripts\synchro\src\server.js:995:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:60:23)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 401
+}
+Error: You do not have permission for this action.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at assertPermission (C:\Scripts\synchro\src\server.js:1017:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:117:7)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 403
+}
+Error: You do not have permission for this action.
+    at httpError (C:\Scripts\synchro\src\server.js:1509:17)
+    at assertPermission (C:\Scripts\synchro\src\server.js:1017:11)
+    at Server.<anonymous> (C:\Scripts\synchro\src\server.js:117:7)
+    at Server.emit (node:events:508:28)
+    at parserOnIncoming (node:_http_server:1210:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17) {
+  statusCode: 403
+}

@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant B as Browser
+    participant S as Server
+    participant SM as SessionManager
+    participant DB as SQLite
+
+    B->>S: POST /api/session/login username+password
+    S->>SM: loginUser(username, password)
+    SM->>DB: findUserByUsername(username)
+    DB-->>SM: user row with passwordHash and passwordSalt
+    SM->>SM: scrypt hash comparison via timingSafeEqual
+    SM->>SM: randomBytes(32) generates token stored in Map
+    SM-->>S: token and user object
+    S->>B: Set-Cookie synchro_session=TOKEN HttpOnly SameSite=Strict Max-Age=43200
+
+    Note over B,S: Subsequent requests carry the cookie automatically
+
+    B->>S: GET /api/admin/keys with cookie
+    S->>SM: requireSession(req)
+    SM->>SM: Parse cookie and look up token in Map
+    SM->>DB: findUserById to re-hydrate fresh user data
+    SM->>SM: Extend expiresAt by 12 hours sliding window
+    SM-->>S: session object with user and permissions
+    S-->>B: 200 OK with keys array
