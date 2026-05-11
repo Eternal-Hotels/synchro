@@ -12,6 +12,7 @@ This project scaffolds a self-contained Node.js upload server and a Python compa
   - `api_manager` accounts that can create, disable, enable, and delete users
   - `viewer` accounts that can only see file uploads for assigned endpoint folders
   - File browsing and download links for each endpoint the signed-in user can access
+  - Parsed HTML report viewing directly inside the endpoint explorer for browser users
 - A Python companion app in `companion/uploader.py` that:
   - Saves `SYNCHRO_SERVER`, `SYNCHRO_ENDPOINT`, and `SYNCHRO_API_KEY` to `companion/.env`
   - Creates `companion/test.txt` with the text `successful`
@@ -145,6 +146,28 @@ In VS Code, run the `Build SynchroCompanion` task to call the same script.
 - User accounts, endpoint keys, and viewer endpoint scopes are stored in `data/synchro.sqlite`.
 - On the first SQLite-backed startup, the server automatically imports any existing `data/users.json` and `data/keys.json` records into SQLite if the database is empty.
 - Stored upload files still live on disk under `storage/<endpointSlug>/`.
+
+## Parse category reports to CSV
+
+If a synced report set contains one or more `Category.html` files, you can export all category rows to a CSV with:
+
+```powershell
+npm run parse:categories -- --input storage\smoke-test-client\3\2026-04-30.046
+```
+
+You can also point it directly at one report file:
+
+```powershell
+npm run parse:categories -- --input storage\smoke-test-client\3\2026-04-30.046\Category.html
+```
+
+By default, the script writes `category-export.csv` into the input folder, or `Category-categories.csv` next to a single input file. To choose a destination:
+
+```powershell
+npm run parse:categories -- --input storage\smoke-test-client --output data\category-export.csv
+```
+
+Inside the web control panel, signed-in users can also open an endpoint explorer, click `View Parsed` on any synced `.html` or `.htm` report, and review the extracted tables in the browser.
 
 ## API key security
 

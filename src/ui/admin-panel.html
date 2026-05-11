@@ -119,6 +119,27 @@
       </div>
     </div>
   </div>
+  <div id="report-modal" class="explorer-modal" aria-hidden="true">
+    <div class="explorer-shell report-shell">
+      <div class="explorer-head">
+        <div>
+          <h2 id="report-title">Parsed Report</h2>
+          <p id="report-subtitle" class="subhead">Review parsed report tables without downloading the raw source file.</p>
+        </div>
+        <button id="report-close" class="secondary">Close</button>
+      </div>
+      <div class="explorer-tools">
+        <div class="toolbar-row">
+          <button id="report-download-json" class="secondary">Download JSON</button>
+          <button id="report-download-csv" class="secondary">Download CSV</button>
+        </div>
+      </div>
+      <div class="explorer-body">
+        <div id="report-status" class="status"></div>
+        <div id="report-body" class="report-body"></div>
+      </div>
+    </div>
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>

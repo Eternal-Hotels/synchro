@@ -4,7 +4,8 @@
   "description": "Self-contained Node.js file upload service with endpoint keys and a Python companion uploader.",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "parse:categories": "node src/parse-category-report.js"
   },
   "dependencies": {
     "sqlite3": "^5.1.7"

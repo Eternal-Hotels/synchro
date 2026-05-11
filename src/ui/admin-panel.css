@@ -287,6 +287,11 @@ button.danger { background: var(--danger-soft); color: var(--danger); }
   box-shadow: var(--shadow);
 }
 
+.report-shell {
+  width: min(1180px, 100%);
+  grid-template-rows: auto auto 1fr;
+}
+
 .explorer-head {
   display: flex;
   justify-content: space-between;
@@ -324,6 +329,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); }
 .explorer-body {
   overflow: auto;
   padding: 0 20px 20px;
+  min-height: 0;
 }
 
 .explorer-list {
@@ -372,6 +378,76 @@ button.danger { background: var(--danger-soft); color: var(--danger); }
 .empty {
   color: var(--muted);
   font-style: italic;
+}
+
+.report-body {
+  display: grid;
+  gap: 18px;
+  padding-bottom: 20px;
+}
+
+.report-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.report-meta-card,
+.report-section {
+  border: 1px solid rgba(214, 198, 177, 0.65);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 14px;
+}
+
+.report-meta-card strong,
+.report-section strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.report-section {
+  display: grid;
+  gap: 12px;
+}
+
+.report-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.report-table-wrap {
+  overflow: auto;
+  border: 1px solid rgba(214, 198, 177, 0.55);
+  border-radius: 12px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.report-table th,
+.report-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(214, 198, 177, 0.45);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.report-table th {
+  position: sticky;
+  top: 0;
+  background: #f2eadc;
+}
+
+.report-table tr:last-child td {
+  border-bottom: 0;
 }
 
 .checkbox-list {

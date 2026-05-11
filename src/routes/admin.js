@@ -4,6 +4,7 @@
 //   readJsonBody — reads the request body and parses it as JSON
 //   sendJson     — writes a JSON HTTP response with the right Content-Type header
 const { readJsonBody, sendJson } = require("../utils/http");
+const { parseReportFile } = require("../services/report-parser");
 
 // This function handles all /api/admin/** routes.
 // Every route here requires a valid session cookie AND the appropriate permission.
@@ -130,6 +131,49 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
       requestUrl.searchParams.get("path") || "",
       storage
     );
+    return true;
+  }
+
+  const fileDeleteMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/file-delete$/);
+  if (req.method === "DELETE" && fileDeleteMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_keys");
+    const deleted = await storage.deleteStoredEntryForKey(
+      fileDeleteMatch[1],
+      requestUrl.searchParams.get("path") || ""
+    );
+    sendJson(res, 200, deleted);
+    return true;
+  }
+
+  const reportMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/report$/);
+  if (req.method === "GET" && reportMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, reportMatch[1]);
+
+    let fileInfo;
+    try {
+      fileInfo = await uploadService.resolveStoredFile(
+        reportMatch[1],
+        requestUrl.searchParams.get("path") || "",
+        storage
+      );
+    } catch (error) {
+      const statusCode = error.message === "Endpoint key not found."
+        ? 404
+        : error.message === "File not found."
+          ? 404
+          : 400;
+      sendJson(res, statusCode, { error: error.message });
+      return true;
+    }
+
+    if (!/\.(html?|pdf)$/i.test(fileInfo.filename)) {
+      sendJson(res, 400, { error: "Only .html, .htm, and .pdf reports can be parsed." });
+      return true;
+    }
+
+    sendJson(res, 200, parseReportFile(fileInfo.fullPath));
     return true;
   }
 

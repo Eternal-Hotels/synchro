@@ -259,6 +259,42 @@ async function listDirectoryForKey(slug, requestedPath) {
   return directoryListingForSlug(slug, requestedPath);
 }
 
+async function deleteStoredEntryForKey(slug, requestedPath) {
+  const keyRecord = await findKeyBySlug(slug);
+  if (!keyRecord) {
+    throw httpError(404, "Endpoint key not found.");
+  }
+
+  const endpointDir = path.join(STORAGE_DIR, slug);
+  ensureDirectory(endpointDir);
+
+  const relativePath = requestedPath ? sanitizeRelativePath(requestedPath) : "";
+  if (!relativePath) {
+    throw httpError(400, "Invalid file path.");
+  }
+
+  const targetPath = path.join(endpointDir, relativePath);
+  if (!fs.existsSync(targetPath)) {
+    throw httpError(404, "File or folder not found.");
+  }
+
+  const stats = fs.statSync(targetPath);
+  const kind = stats.isDirectory() ? "directory" : "file";
+
+  if (stats.isDirectory()) {
+    fs.rmSync(targetPath, { recursive: true, force: false });
+  } else {
+    fs.unlinkSync(targetPath);
+  }
+
+  return {
+    deleted: true,
+    slug,
+    path: relativePath.replace(/\\/g, "/"),
+    kind
+  };
+}
+
 async function listUsersForClient() {
   // The UI only needs a sanitized representation of users.
   return (await loadUsers())
@@ -922,6 +958,7 @@ module.exports = {
   deleteKeyRecord,
   findKeyBySlug,
   listDirectoryForKey,
+  deleteStoredEntryForKey,
   listUsersForClient,
   createUserRecord,
   updateUserRecord,

@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const state = {
   user: null,
@@ -11,6 +11,11 @@ const state = {
     currentPath: "",
     breadcrumbs: [],
     entries: []
+  },
+  reportViewer: {
+    slug: "",
+    path: "",
+    report: null
   }
 };
 
@@ -39,6 +44,14 @@ const explorerList = document.getElementById("explorer-list");
 const explorerCrumbs = document.getElementById("explorer-crumbs");
 const explorerUpButton = document.getElementById("explorer-up");
 const explorerCloseButton = document.getElementById("explorer-close");
+const reportModal = document.getElementById("report-modal");
+const reportTitle = document.getElementById("report-title");
+const reportSubtitle = document.getElementById("report-subtitle");
+const reportStatus = document.getElementById("report-status");
+const reportBody = document.getElementById("report-body");
+const reportCloseButton = document.getElementById("report-close");
+const reportDownloadJsonButton = document.getElementById("report-download-json");
+const reportDownloadCsvButton = document.getElementById("report-download-csv");
 
 document.getElementById("login-button").addEventListener("click", login);
 document.getElementById("logout-button").addEventListener("click", logout);
@@ -49,6 +62,9 @@ newRoleSelect.addEventListener("change", syncScopeVisibility);
 tabKeys.addEventListener("click", () => switchTab("keys"));
 tabUsers.addEventListener("click", () => switchTab("users"));
 explorerCloseButton.addEventListener("click", closeExplorer);
+reportCloseButton.addEventListener("click", closeReportViewer);
+reportDownloadJsonButton.addEventListener("click", downloadParsedReportJson);
+reportDownloadCsvButton.addEventListener("click", downloadParsedReportCsv);
 explorerUpButton.addEventListener("click", () => {
   const nextPath = state.explorer.currentPath ? parentPath(state.explorer.currentPath) : "";
   loadExplorer(state.explorer.slug, state.explorer.name, nextPath);
@@ -58,10 +74,14 @@ explorerModal.addEventListener("click", (event) => {
     closeExplorer();
   }
 });
+reportModal.addEventListener("click", (event) => {
+  if (event.target === reportModal) {
+    closeReportViewer();
+  }
+});
 window.addEventListener("load", bootstrap);
 
 async function bootstrap() {
-  // Ask the server whether the browser already has a valid session cookie.
   try {
     const response = await fetch("/api/session/me");
     if (!response.ok) {
@@ -78,7 +98,6 @@ async function bootstrap() {
 }
 
 async function login() {
-  // Send credentials to the server and, on success, update the UI state.
   setAuthStatus("Signing in...");
   try {
     const response = await fetch("/api/session/login", {
@@ -104,7 +123,6 @@ async function login() {
 }
 
 async function logout() {
-  // The cookie is HTTP-only, so the browser asks the server to clear it.
   await fetch("/api/session/logout", { method: "POST" });
   state.user = null;
   state.keys = [];
@@ -113,20 +131,19 @@ async function logout() {
 }
 
 function showLoggedOut() {
-  // Logged-out mode hides the admin application and shows the sign-in form.
   authView.classList.remove("hidden");
   appView.classList.add("hidden");
   userPill.style.display = "none";
   closeExplorer();
+  closeReportViewer();
   setAppStatus("");
 }
 
 function showLoggedIn() {
-  // Logged-in mode reveals the app and adjusts visible controls based on permissions.
   authView.classList.add("hidden");
   appView.classList.remove("hidden");
   userPill.style.display = "inline-flex";
-  userLabel.textContent = state.user.username + " â€¢ " + friendlyRole(state.user.role);
+  userLabel.textContent = state.user.username + " - " + friendlyRole(state.user.role);
   keyCreatePanel.classList.toggle("hidden", !state.user.permissions.manageKeys);
   tabUsers.classList.toggle("hidden", !state.user.permissions.manageUsers);
   if (!state.user.permissions.manageUsers && state.activeTab === "users") {
@@ -137,13 +154,11 @@ function showLoggedIn() {
 }
 
 function switchTab(tab) {
-  // We keep both tabs in memory and just switch which one is visible.
   state.activeTab = tab;
   renderTabState();
 }
 
 function renderTabState() {
-  // Only managers can open the Users tab.
   const showUsers = state.activeTab === "users" && state.user.permissions.manageUsers;
   keysView.classList.toggle("hidden", showUsers);
   usersView.classList.toggle("hidden", !showUsers);
@@ -152,7 +167,6 @@ function renderTabState() {
 }
 
 async function refreshAll() {
-  // Reload the endpoint list for everyone, and the user list only for managers.
   if (!state.user) {
     return;
   }
@@ -188,7 +202,6 @@ async function refreshAll() {
 }
 
 async function createKey() {
-  // The server, not the browser, is responsible for generating secure API keys.
   try {
     setAppStatus("Creating endpoint key...");
     const response = await fetch("/api/admin/keys", {
@@ -236,7 +249,6 @@ async function rotateKey(slug) {
 }
 
 async function createUser() {
-  // Viewer accounts carry endpoint scopes; manager accounts do not need them.
   try {
     setAppStatus("Creating user...");
     const role = document.getElementById("new-role").value;
@@ -266,7 +278,6 @@ async function createUser() {
 }
 
 async function mutate(url, options, successMessage) {
-  // This helper centralizes the common "call API, handle errors, refresh state" pattern.
   try {
     setAppStatus("Updating...");
     const response = await fetch(url, options);
@@ -282,7 +293,6 @@ async function mutate(url, options, successMessage) {
 }
 
 function renderKeys() {
-  // Each endpoint card summarizes one upload target and its on-disk storage folder.
   if (!state.keys.length) {
     keyListEl.innerHTML = '<div class="card"><div class="empty">No endpoint keys exist yet.</div></div>';
     return;
@@ -300,32 +310,32 @@ function renderKeys() {
         '<button class="danger" data-action="delete-key" data-slug="' + escapeHtml(key.slug) + '">Delete Key</button>')
       : "";
     const explorerSummary = key.rootEntryCount
-      ? escapeHtml(String(key.rootEntryCount)) + ' top-level item(s) ready to browse'
-      : 'No synced items at the endpoint root yet.';
+      ? escapeHtml(String(key.rootEntryCount)) + " top-level item(s) ready to browse"
+      : "No synced items at the endpoint root yet.";
     const lastUsedLine = key.lastUsedAt
-      ? '<div>Last used: ' + escapeHtml(key.lastUsedAt) + '</div>'
-      : '<div>Last used: <code>Never</code></div>';
+      ? "<div>Last used: " + escapeHtml(key.lastUsedAt) + "</div>"
+      : "<div>Last used: <code>Never</code></div>";
     const rotatedLine = key.rotatedAt
-      ? '<div>Last rotated: ' + escapeHtml(key.rotatedAt) + ' (' + escapeHtml(String(key.rotationCount)) + ' rotation(s))</div>'
-      : '<div>Last rotated: <code>Never</code></div>';
+      ? "<div>Last rotated: " + escapeHtml(key.rotatedAt) + " (" + escapeHtml(String(key.rotationCount)) + " rotation(s))</div>"
+      : "<div>Last rotated: <code>Never</code></div>";
 
-    return '<article class="card">' +
-      '<div class="card-head">' +
-      '<div><h2>' + escapeHtml(key.name) + '</h2>' + badge + '</div>' +
-      '<div class="toolbar-row">' + actions + '</div>' +
-      '</div>' +
-      '<div class="meta">' +
-      '<div>Endpoint: <code>/api/upload/' + escapeHtml(key.slug) + '</code></div>' +
-      '<div>API key: <code>Stored as a secure hash and never shown again after creation/rotation</code></div>' +
-      '<div>Created: ' + escapeHtml(key.createdAt) + '</div>' +
+    return "<article class=\"card\">" +
+      "<div class=\"card-head\">" +
+      "<div><h2>" + escapeHtml(key.name) + "</h2>" + badge + "</div>" +
+      "<div class=\"toolbar-row\">" + actions + "</div>" +
+      "</div>" +
+      "<div class=\"meta\">" +
+      "<div>Endpoint: <code>/api/upload/" + escapeHtml(key.slug) + "</code></div>" +
+      "<div>API key: <code>Stored as a secure hash and never shown again after creation/rotation</code></div>" +
+      "<div>Created: " + escapeHtml(key.createdAt) + "</div>" +
       lastUsedLine +
       rotatedLine +
-      '<div>Storage folder: <code>storage/' + escapeHtml(key.slug) + '</code></div>' +
-      '</div>' +
-      '<div class="files">' +
-      '<div class="file-row"><div><strong>File Explorer</strong><br><small>' + explorerSummary + '</small></div><div><button class="explorer-link" data-explorer-slug="' + escapeHtml(key.slug) + '" data-explorer-name="' + escapeHtml(key.name) + '">Open Explorer</button></div></div>' +
-      '</div>' +
-      '</article>';
+      "<div>Storage folder: <code>storage/" + escapeHtml(key.slug) + "</code></div>" +
+      "</div>" +
+      "<div class=\"files\">" +
+      "<div class=\"file-row\"><div><strong>File Explorer</strong><br><small>" + explorerSummary + "</small></div><div><button class=\"explorer-link\" data-explorer-slug=\"" + escapeHtml(key.slug) + "\" data-explorer-name=\"" + escapeHtml(key.name) + "\">Open Explorer</button></div></div>" +
+      "</div>" +
+      "</article>";
   }).join("");
 
   keyListEl.querySelectorAll("button[data-action]").forEach((button) => {
@@ -337,12 +347,12 @@ function renderKeys() {
       } else if (action === "restore") {
         await mutate("/api/admin/keys/" + slug + "/restore", { method: "POST" }, "Endpoint restored.");
       } else if (action === "rotate") {
-        const confirmed = window.confirm('Rotate the API key for "' + slug + '"? The current key will stop working immediately.');
+        const confirmed = window.confirm("Rotate the API key for \"" + slug + "\"? The current key will stop working immediately.");
         if (confirmed) {
           await rotateKey(slug);
         }
       } else if (action === "delete-key") {
-        const confirmed = window.confirm('Delete key "' + slug + '"? Stored files stay on disk.');
+        const confirmed = window.confirm("Delete key \"" + slug + "\"? Stored files stay on disk.");
         if (confirmed) {
           await mutate("/api/admin/keys/" + slug, { method: "DELETE" }, "Key deleted. Stored files were kept.");
         }
@@ -358,7 +368,6 @@ function renderKeys() {
 }
 
 async function loadExplorer(slug, name, currentPath) {
-  // The explorer requests one folder listing at a time from the server.
   state.explorer.slug = slug;
   state.explorer.name = name;
   explorerModal.classList.add("open");
@@ -390,10 +399,9 @@ async function loadExplorer(slug, name, currentPath) {
 }
 
 function renderExplorer() {
-  // Rebuild the file browser from the latest directory-listing payload.
   explorerUpButton.disabled = !state.explorer.currentPath;
   explorerCrumbs.innerHTML = state.explorer.breadcrumbs.map((crumb) => (
-    '<button class="crumb" data-crumb-path="' + escapeHtml(crumb.path) + '">' + escapeHtml(crumb.name) + '</button>'
+    "<button class=\"crumb\" data-crumb-path=\"" + escapeHtml(crumb.path) + "\">" + escapeHtml(crumb.name) + "</button>"
   )).join("");
 
   explorerCrumbs.querySelectorAll("button[data-crumb-path]").forEach((button) => {
@@ -408,21 +416,29 @@ function renderExplorer() {
   }
 
   explorerList.innerHTML = state.explorer.entries.map((entry) => {
+    const canParseReport = entry.kind === "file" && /\.(html?|pdf)$/i.test(entry.name);
+    const canDeleteEntry = Boolean(state.user && state.user.permissions && state.user.permissions.manageKeys);
     const primaryAction = entry.kind === "directory"
-      ? '<button class="secondary" data-open-path="' + escapeHtml(entry.path) + '">Open Folder</button>'
-      : '<a href="' + entry.downloadUrl + '">Download</a>';
+      ? "<button class=\"secondary\" data-open-path=\"" + escapeHtml(entry.path) + "\">Open Folder</button>"
+      : "<a href=\"" + entry.downloadUrl + "\">Download</a>";
+    const parseAction = canParseReport
+      ? "<button class=\"secondary\" data-parse-path=\"" + escapeHtml(entry.path) + "\" data-parse-name=\"" + escapeHtml(entry.name) + "\">View Parsed</button>"
+      : "";
+    const deleteAction = canDeleteEntry
+      ? "<button class=\"danger\" data-delete-path=\"" + escapeHtml(entry.path) + "\" data-delete-kind=\"" + escapeHtml(entry.kind) + "\" data-delete-name=\"" + escapeHtml(entry.name) + "\">Delete</button>"
+      : "";
     const secondaryMeta = entry.kind === "directory"
       ? escapeHtml(entry.createdAt)
-      : escapeHtml(entry.sizeLabel) + ' | ' + escapeHtml(entry.createdAt);
-    return '<div class="explorer-row">' +
-      '<div class="explorer-row-title">' +
-      '<div><strong>' + escapeHtml(entry.name) + '</strong></div>' +
-      '<div class="explorer-kind">' + escapeHtml(entry.kind) + '</div>' +
-      '<div class="explorer-path">' + escapeHtml(entry.path) + '</div>' +
-      '<div class="explorer-path">' + secondaryMeta + '</div>' +
-      '</div>' +
-      '<div class="explorer-actions">' + primaryAction + '</div>' +
-      '</div>';
+      : escapeHtml(entry.sizeLabel) + " | " + escapeHtml(entry.createdAt);
+    return "<div class=\"explorer-row\">" +
+      "<div class=\"explorer-row-title\">" +
+      "<div><strong>" + escapeHtml(entry.name) + "</strong></div>" +
+      "<div class=\"explorer-kind\">" + escapeHtml(entry.kind) + "</div>" +
+      "<div class=\"explorer-path\">" + escapeHtml(entry.path) + "</div>" +
+      "<div class=\"explorer-path\">" + secondaryMeta + "</div>" +
+      "</div>" +
+      "<div class=\"explorer-actions\">" + parseAction + primaryAction + deleteAction + "</div>" +
+      "</div>";
   }).join("");
 
   explorerList.querySelectorAll("button[data-open-path]").forEach((button) => {
@@ -430,10 +446,133 @@ function renderExplorer() {
       loadExplorer(state.explorer.slug, state.explorer.name, button.dataset.openPath);
     });
   });
+
+  explorerList.querySelectorAll("button[data-parse-path]").forEach((button) => {
+    button.addEventListener("click", () => {
+      loadParsedReport(state.explorer.slug, button.dataset.parsePath, button.dataset.parseName || "Report");
+    });
+  });
+
+  explorerList.querySelectorAll("button[data-delete-path]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const entryPath = button.dataset.deletePath;
+      const entryKind = button.dataset.deleteKind || "file";
+      const entryName = button.dataset.deleteName || entryPath;
+      const warning = entryKind === "directory"
+        ? "Delete folder \"" + entryName + "\" and everything inside it?"
+        : "Delete file \"" + entryName + "\" from the server?";
+      const confirmed = window.confirm(warning);
+      if (!confirmed) {
+        return;
+      }
+      await deleteExplorerEntry(entryPath, entryKind);
+    });
+  });
+}
+
+async function deleteExplorerEntry(entryPath, entryKind) {
+  try {
+    setExplorerStatus("Deleting " + entryKind + "...");
+    const response = await fetch(
+      "/api/admin/keys/" + encodeURIComponent(state.explorer.slug) + "/file-delete?path=" + encodeURIComponent(entryPath),
+      { method: "DELETE" }
+    );
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not delete entry.");
+    }
+    setExplorerStatus("Deleted " + payload.kind + " " + payload.path + ".");
+    await refreshAll();
+    await loadExplorer(state.explorer.slug, state.explorer.name, state.explorer.currentPath);
+  } catch (error) {
+    setExplorerStatus(error.message, true);
+  }
+}
+
+async function loadParsedReport(slug, reportPath, reportName) {
+  state.reportViewer.slug = slug;
+  state.reportViewer.path = reportPath;
+  state.reportViewer.report = null;
+  reportModal.classList.add("open");
+  reportModal.setAttribute("aria-hidden", "false");
+  reportTitle.textContent = reportName;
+  reportSubtitle.textContent = "Parsing report...";
+  reportBody.innerHTML = "";
+  syncReportDownloadButtons();
+  setReportStatus("Loading parsed report...");
+
+  try {
+    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/report?path=" + encodeURIComponent(reportPath));
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not parse report.");
+    }
+    state.reportViewer.report = payload;
+    reportTitle.textContent = payload.reportTitle || reportName;
+    reportSubtitle.textContent = reportPath;
+    syncReportDownloadButtons();
+    renderParsedReport();
+    setReportStatus(payload.sections.length ? "" : "No tabular report sections were detected.");
+  } catch (error) {
+    syncReportDownloadButtons();
+    setReportStatus(error.message, true);
+  }
+}
+
+function renderParsedReport() {
+  const report = state.reportViewer.report;
+  if (!report) {
+    reportBody.innerHTML = "";
+    return;
+  }
+
+  const metadataCards = [
+    renderMetaCard("Type", report.reportType || "report"),
+    renderMetaCard("Store", report.storeNumber || "Unknown"),
+    renderMetaCard("Period", report.periodLabel || "Unknown"),
+    renderMetaCard("Open", report.openPeriod || "Unknown"),
+    renderMetaCard("Close", report.closePeriod || "Unknown"),
+    renderMetaCard("Scope", report.scopeLabel || "Not labeled")
+  ].join("");
+
+  const sectionMarkup = report.sections.map((section) => {
+    const rowSummary = section.truncated
+      ? "Showing " + section.rows.length + " of " + section.totalRows + " row(s)"
+      : section.totalRows + " row(s)";
+    const headers = section.headers.length
+      ? section.headers
+      : Object.keys(section.rows[0] || {});
+    const tableHead = headers.map((header) => "<th>" + escapeHtml(header) + "</th>").join("");
+    const tableRows = section.rows.length
+      ? section.rows.map((row) => (
+          "<tr>" + headers.map((header) => "<td>" + escapeHtml(row[header] || "") + "</td>").join("") + "</tr>"
+        )).join("")
+      : "<tr><td colspan=\"" + headers.length + "\" class=\"empty\">No rows found in this section.</td></tr>";
+
+    return "<section class=\"report-section\">" +
+      "<div class=\"report-section-head\">" +
+      "<strong>" + escapeHtml(section.title || "Report Section") + "</strong>" +
+      "<span class=\"explorer-path\">" + escapeHtml(rowSummary) + "</span>" +
+      "</div>" +
+      "<div class=\"report-table-wrap\">" +
+      "<table class=\"report-table\">" +
+      "<thead><tr>" + tableHead + "</tr></thead>" +
+      "<tbody>" + tableRows + "</tbody>" +
+      "</table>" +
+      "</div>" +
+      "</section>";
+  }).join("");
+
+  reportBody.innerHTML =
+    "<section class=\"report-meta\">" + metadataCards + "</section>" +
+    (sectionMarkup || "<div class=\"report-section\"><div class=\"empty\">No parsed sections are available for this report.</div></div>");
+}
+
+function renderMetaCard(label, value) {
+  return "<div class=\"report-meta-card\"><strong>" + escapeHtml(label) + "</strong><div>" + escapeHtml(value) + "</div></div>";
 }
 
 function closeExplorer() {
-  // Resetting state here makes a future open start from a clean slate.
   explorerModal.classList.remove("open");
   explorerModal.setAttribute("aria-hidden", "true");
   state.explorer = {
@@ -448,21 +587,244 @@ function closeExplorer() {
   setExplorerStatus("");
 }
 
+function closeReportViewer() {
+  reportModal.classList.remove("open");
+  reportModal.setAttribute("aria-hidden", "true");
+  state.reportViewer = {
+    slug: "",
+    path: "",
+    report: null
+  };
+  reportBody.innerHTML = "";
+  syncReportDownloadButtons();
+  setReportStatus("");
+}
+
+function syncReportDownloadButtons() {
+  const hasReport = Boolean(state.reportViewer.report);
+  reportDownloadJsonButton.disabled = !hasReport;
+  reportDownloadCsvButton.disabled = !hasReport;
+}
+
+function downloadParsedReportJson() {
+  if (!state.reportViewer.report) {
+    setReportStatus("Load a parsed report before downloading.", true);
+    return;
+  }
+
+  const filename = buildReportDownloadName("json");
+  downloadTextFile(
+    filename,
+    JSON.stringify(state.reportViewer.report, null, 2),
+    "application/json;charset=utf-8"
+  );
+}
+
+function downloadParsedReportCsv() {
+  if (!state.reportViewer.report) {
+    setReportStatus("Load a parsed report before downloading.", true);
+    return;
+  }
+
+  const filename = buildReportDownloadName("csv");
+  downloadTextFile(
+    filename,
+    buildParsedReportCsv(state.reportViewer.report),
+    "text/csv;charset=utf-8"
+  );
+}
+
+function buildReportDownloadName(extension) {
+  const baseName = state.reportViewer.path
+    ? state.reportViewer.path.split("/").filter(Boolean).pop() || "report"
+    : "report";
+  const withoutExtension = baseName.replace(/\.[^.]+$/, "") || "report";
+  return withoutExtension + "-parsed." + extension;
+}
+
+function buildParsedReportCsv(report) {
+  const preferredSection = findPreferredCsvSection(report);
+  if (!preferredSection) {
+    return "value\n";
+  }
+
+  const headerLine = preferredSection.columns.map((column) => escapeCsv(column.header)).join(",");
+  const lines = [headerLine];
+
+  preferredSection.rows.forEach((row) => {
+    lines.push(
+      preferredSection.columns
+        .map((column) => escapeCsv(column.getValue(row)))
+        .join(",")
+    );
+  });
+
+  return lines.join("\n") + "\n";
+}
+
+function findPreferredCsvSection(report) {
+  const departmentSection = report.sections.find((section) => matchesHeaders(section.headers, [
+    "Dept#",
+    "Description",
+    "Cust#",
+    "Items",
+    "% of Sales",
+    "Gross",
+    "Refunds",
+    "Discounts",
+    "Net Sales"
+  ]));
+  if (departmentSection) {
+    return {
+      rows: departmentSection.rows.filter((row) => /^\d+$/.test(String(row["Dept#"] || "").trim())),
+      columns: [
+        { header: "department", getValue: (row) => row["Dept#"] || "" },
+        { header: "description", getValue: (row) => row.Description || "" },
+        { header: "customers", getValue: (row) => row["Cust#"] || "" },
+        { header: "items", getValue: (row) => row.Items || "" },
+        { header: "% of sale", getValue: (row) => row["% of Sales"] || "" },
+        { header: "gross", getValue: (row) => row.Gross || "" },
+        { header: "refunds", getValue: (row) => row.Refunds || "" },
+        { header: "discounts", getValue: (row) => row.Discounts || "" },
+        { header: "net sales", getValue: (row) => row["Net Sales"] || "" }
+      ]
+    };
+  }
+
+  const gilbarcoCategorySection = report.sections.find((section) => matchesHeaders(section.headers, [
+    "Department",
+    "Gross Sales",
+    "Item Count",
+    "Refund Count",
+    "Net Count",
+    "Refund $",
+    "Discount $",
+    "Net Sales",
+    "% of Sales"
+  ]));
+  if (gilbarcoCategorySection) {
+    const gilbarcoFuelSection = report.sections.find((section) => matchesHeaders(section.headers, [
+      "Grade",
+      "Grade Name",
+      "Volume",
+      "Sales",
+      "% of Total Fuel Sales"
+    ]));
+    const fuelRows = gilbarcoFuelSection
+      ? gilbarcoFuelSection.rows.map((row) => ({
+          Department: [row.Grade || "", row["Grade Name"] || ""].filter(Boolean).join(" "),
+          "Gross Sales": row.Sales || "",
+          "Item Count": row.Volume || "",
+          "Refund Count": "",
+          "Net Count": "",
+          "Refund $": "",
+          "Discount $": "",
+          "Net Sales": row.Sales || "",
+          "% of Sales": row["% of Total Fuel Sales"] || ""
+        }))
+      : [];
+    return {
+      rows: fuelRows.concat(gilbarcoCategorySection.rows),
+      columns: [
+        { header: "department", getValue: (row) => row.Department || "" },
+        { header: "gross sales", getValue: (row) => row["Gross Sales"] || "" },
+        { header: "item count", getValue: (row) => row["Item Count"] || "" },
+        { header: "refund count", getValue: (row) => row["Refund Count"] || "" },
+        { header: "net count", getValue: (row) => row["Net Count"] || "" },
+        { header: "refund $", getValue: (row) => row["Refund $"] || "" },
+        { header: "discount $", getValue: (row) => row["Discount $"] || "" },
+        { header: "net sales", getValue: (row) => row["Net Sales"] || "" },
+        { header: "% of sales", getValue: (row) => row["% of Sales"] || "" }
+      ]
+    };
+  }
+
+  const categorySection = report.sections.find((section) => matchesHeaders(section.headers, [
+    "Cat#",
+    "Description",
+    "Cust#",
+    "Items",
+    "% of Sales",
+    "Net Sales"
+  ]));
+  if (categorySection) {
+    return {
+      rows: categorySection.rows.filter((row) => /^\d+$/.test(String(row["Cat#"] || "").trim())),
+      columns: [
+        { header: "category", getValue: (row) => row["Cat#"] || "" },
+        { header: "description", getValue: (row) => row.Description || "" },
+        { header: "customers", getValue: (row) => row["Cust#"] || "" },
+        { header: "items", getValue: (row) => row.Items || "" },
+        { header: "% of sale", getValue: (row) => row["% of Sales"] || "" },
+        { header: "net sales", getValue: (row) => row["Net Sales"] || "" }
+      ]
+    };
+  }
+
+  const firstSection = report.sections.find((section) => section.rows.length);
+  if (!firstSection) {
+    return null;
+  }
+
+  const headers = firstSection.headers.length ? firstSection.headers : Object.keys(firstSection.rows[0] || {});
+  return {
+    rows: firstSection.rows,
+    columns: headers.map((header) => ({
+      header,
+      getValue: (row) => row[header] || ""
+    }))
+  };
+}
+
+function matchesHeaders(actualHeaders, expectedHeaders) {
+  if (actualHeaders.length !== expectedHeaders.length) {
+    return false;
+  }
+
+  return expectedHeaders.every((header, index) => normalizeHeader(actualHeaders[index]) === normalizeHeader(header));
+}
+
+function normalizeHeader(value) {
+  return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function escapeCsv(value) {
+  const text = String(value);
+  if (/[",\n\r]/.test(text)) {
+    return "\"" + text.replace(/"/g, "\"\"") + "\"";
+  }
+  return text;
+}
+
+function downloadTextFile(filename, contents, contentType) {
+  const blob = new Blob([contents], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function setExplorerStatus(message, isError = false) {
-  // Reuse one status line for loading, informational, and error messages.
   explorerStatus.textContent = message;
   explorerStatus.style.color = isError ? "#b42318" : "#6f6658";
 }
 
+function setReportStatus(message, isError = false) {
+  reportStatus.textContent = message;
+  reportStatus.style.color = isError ? "#b42318" : "#6f6658";
+}
+
 function parentPath(value) {
-  // Given "a/b/c", return "a/b" so the Up button knows where to go next.
   const parts = String(value || "").split("/").filter(Boolean);
   parts.pop();
   return parts.join("/");
 }
 
 function renderUsers() {
-  // The browser receives only safe user fields; password hashes never leave the server.
   if (!state.users.length) {
     userListEl.innerHTML = '<div class="card"><div class="empty">No users found.</div></div>';
     return;
@@ -532,7 +894,6 @@ function renderUsers() {
 }
 
 function renderScopeChecklist() {
-  // Rebuild the new-user scope chooser from the currently known endpoint list.
   const checkboxes = state.keys.length
     ? state.keys.map((key) => (
         '<label class="checkbox-item"><input type="checkbox" value="' + escapeHtml(key.slug) + '"> <span>' +
@@ -544,7 +905,6 @@ function renderScopeChecklist() {
 }
 
 function renderUserScopeEditor(user) {
-  // Viewer accounts can be re-scoped by checking and unchecking endpoint boxes.
   if (!state.keys.length) {
     return '<div class="empty">No endpoints available to assign.</div>';
   }
@@ -557,35 +917,29 @@ function renderUserScopeEditor(user) {
 }
 
 function syncScopeVisibility() {
-  // Hide viewer-only controls when the chosen role is not "viewer".
   const isViewer = newRoleSelect.value === "viewer";
   scopeField.classList.toggle("hidden", !isViewer);
 }
 
 function selectedScopes() {
-  // Collect the values from the checked boxes into a plain array.
   return Array.from(endpointScopeList.querySelectorAll('input[type="checkbox"]:checked')).map((checkbox) => checkbox.value);
 }
 
 function setAuthStatus(message, isError = false) {
-  // Status messages double as lightweight error display.
   authStatus.textContent = message;
   authStatus.style.color = isError ? "#b42318" : "#6f6658";
 }
 
 function setAppStatus(message, isError = false) {
-  // The app status bar mirrors the auth status pattern for the main workspace.
   appStatus.textContent = message;
   appStatus.style.color = isError ? "#b42318" : "#6f6658";
 }
 
 function friendlyRole(role) {
-  // Convert stored role IDs into labels people can read quickly.
   return role === "api_manager" ? "API Manager" : "Viewer";
 }
 
 function escapeHtml(value) {
-  // Any user-provided string that is inserted into HTML should be escaped first.
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -593,4 +947,3 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
-
