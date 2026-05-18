@@ -23,8 +23,24 @@ This project scaffolds a self-contained Node.js upload server and a Python compa
   - Uploads a test file on demand
   - Syncs a selected folder to the server
   - Includes sync profiles for `Verifone Commander` HTML-only syncs and `Gilbarco StoreClose` PDF-only syncs
+- A separate SynchroCommander test track in `companion_commander/` that:
+  - Builds a side-by-side `SynchroCommander.exe` without changing `SynchroCompanion.exe`
+  - Stores its runtime state in `companion_commander/commander.env`
+  - Writes its own test file, scheduled log, and sync-hash manifest so it can be tested safely beside the current working companion
 
 ## Run the server
+
+Create a root `.env` file (already scaffolded in this repo) and set your environment values:
+
+```dotenv
+HOST=0.0.0.0
+PORT=3000
+SYNCHRO_GRAPH_TENANT_ID=your-tenant-id-guid
+SYNCHRO_GRAPH_CLIENT_ID=your-app-client-id-guid
+SYNCHRO_GRAPH_CLIENT_SECRET=your-client-secret
+```
+
+Then start the server:
 
 ```powershell
 npm start
@@ -103,6 +119,32 @@ python companion/gui.py
 
 In the GUI, choose a sync profile from the `Sync Profile` drop-down. That profile is saved in `companion/.env` and will be reused on the next run.
 
+## Run SynchroCommander
+
+SynchroCommander is the parallel Verifone test companion. It lives under `companion_commander/` and does not share runtime state with the current working companion.
+
+Seed its config by copying `companion_commander/.env.example` to `companion_commander/commander.env`, or by running the commander entrypoints and saving settings there.
+
+To use the desktop GUI:
+
+```powershell
+python companion_commander/gui.py
+```
+
+To run a headless scheduled sync using the saved commander settings:
+
+```powershell
+python companion_commander/gui.py --scheduled
+```
+
+For the packaged app, the same pattern works:
+
+```powershell
+SynchroCommander.exe --scheduled
+```
+
+This mode reads its settings from `companion_commander/commander.env` when run from source, or from `commander.env` next to the executable when packaged. It also writes `commander-scheduled-sync.log`, `commander-sync-hashes.json`, and `commander-test.txt` beside the running app.
+
 To run a headless scheduled sync using the saved `.env` settings:
 
 ```powershell
@@ -140,6 +182,28 @@ powershell -ExecutionPolicy Bypass -File .\build-companion.ps1 -KeepBuildArtifac
 ```
 
 In VS Code, run the `Build SynchroCompanion` task to call the same script.
+
+## Build SynchroCommander
+
+To rebuild the packaged SynchroCommander executable from the forked Python source:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-commander.ps1
+```
+
+That script rebuilds the exe from `companion_commander/SynchroCommander.spec` and updates:
+
+- `companion_commander/dist/SynchroCommander.exe`
+- `companion_commander/release/SynchroCommander.exe`
+- `companion_commander/release_envfix/SynchroCommander.exe`
+
+If you want to inspect PyInstaller's temporary `dist_rebuild` and `build_rebuild` folders after a build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-commander.ps1 -KeepBuildArtifacts
+```
+
+In VS Code, run the `Build SynchroCommander` task to call the same script.
 
 ## Storage
 
@@ -183,4 +247,5 @@ Inside the web control panel, signed-in users can also open an endpoint explorer
 - Deleting a key removes the key record only. The stored files remain on disk in `storage/<endpointSlug>`.
 - Folder sync uploads preserve relative paths under `storage/<endpointSlug>/`.
 - Sessions are stored in memory, so active logins are cleared when the server restarts.
+- In `Settings`, use `Send Test Digest Now` to verify Graph mail delivery without waiting for the 7:00 AM scheduler.
 - For an internet-exposed deployment, put this behind HTTPS and consider adding CSRF protection, audit logging, and password reset flows.

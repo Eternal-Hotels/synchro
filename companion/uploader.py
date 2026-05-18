@@ -48,13 +48,33 @@ def main():
             config["endpoint"],
             config["api_key"],
             config["folder"],
-            profile=config["profile"]
+            profile=config["profile"],
+            verifone_username=config["verifone_username"],
+            verifone_password=config["verifone_password"],
+            verifone_rnr_path=config["verifone_rnr_path"],
+            verifone_rnr_ip=config["verifone_rnr_ip"],
+            verifone_rnr_report=config["verifone_rnr_report"],
+            verifone_export_dir=config["verifone_export_dir"],
+            monthly_exe_path=config["monthly_exe_path"],
+            monthly_ip=config["monthly_ip"],
+            monthly_report=config["monthly_report"],
+            monthly_user=config["monthly_user"],
+            monthly_password=config["monthly_password"],
+            monthly_export_dir=config["monthly_export_dir"],
+            status_callback=print
         )
         ok_count = sum(1 for item in results if 200 <= item["status"] < 300)
-        print(f"Synced {ok_count}/{len(results)} files from {config['folder']}")
+        skipped_count = sum(1 for item in results if item.get("skipped"))
+        print(
+            f"Synced {ok_count} file(s), skipped {skipped_count} unchanged file(s), "
+            f"matched {len(results)} total from {config['folder']}"
+        )
         print(f"Profile: {config['profile']}")
         for item in results:
-            print(f"{item['status']} {item['relative_path']}")
+            if item.get("skipped"):
+                print(f"SKIP {item['relative_path']} ({item.get('reason', 'unchanged')})")
+            else:
+                print(f"{item['status']} {item['relative_path']}")
         return
 
     # Otherwise create a tiny test file and upload just that single file.

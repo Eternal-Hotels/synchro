@@ -9,18 +9,9 @@ const { readRequestBuffer, sendJson } = require("../utils/http");
 const { verifyApiKey } = require("../utils/security");
 
 async function handleUpload(req, res, slug, storage) {
-  const keyRecord = await storage.findKeyBySlug(slug);
+  const keyRecord = await authenticateEndpointRequest(req, res, slug, storage);
   if (!keyRecord) {
-    return sendJson(res, 404, { error: "Unknown upload endpoint." });
-  }
-
-  if (keyRecord.revoked) {
-    return sendJson(res, 403, { error: "This endpoint key has been revoked." });
-  }
-
-  const suppliedKey = extractApiKey(req);
-  if (!suppliedKey || !verifyApiKey(suppliedKey, keyRecord.apiKeyHash, keyRecord.apiKeySalt)) {
-    return sendJson(res, 401, { error: "Invalid or missing API key." });
+    return;
   }
 
   await storage.recordKeyUsage(keyRecord.slug);
@@ -49,6 +40,7 @@ async function handleUpload(req, res, slug, storage) {
   const targetPath = path.join(endpointDir, relativePath);
   ensureDirectory(path.dirname(targetPath));
   fs.writeFileSync(targetPath, upload.content);
+  await storage.recordUploadEvent(keyRecord.slug, relativePath, upload.content.length);
 
   return sendJson(res, 201, {
     message: "Upload successful.",
@@ -56,6 +48,16 @@ async function handleUpload(req, res, slug, storage) {
     storedAs: relativePath,
     bytes: upload.content.length
   });
+}
+
+async function handleCompanionConfig(req, res, slug, storage) {
+  const keyRecord = await authenticateEndpointRequest(req, res, slug, storage);
+  if (!keyRecord) {
+    return;
+  }
+
+  await storage.recordKeyUsage(keyRecord.slug);
+  return sendJson(res, 200, await storage.getCompanionConfigBySlug(keyRecord.slug));
 }
 
 async function sendStoredFile(res, slug, requestedFilename, storage) {
@@ -80,30 +82,61 @@ async function sendStoredFile(res, slug, requestedFilename, storage) {
   fs.createReadStream(fileInfo.fullPath).pipe(res);
 }
 
-async function resolveStoredFile(slug, requestedFilename, storage) {
+async function resolveStoredEntry(slug, requestedPath, storage) {
   const keyRecord = await storage.findKeyBySlug(slug);
   if (!keyRecord) {
     throw new Error("Endpoint key not found.");
   }
 
-  const relativePath = sanitizeRelativePath(requestedFilename);
+  const relativePath = sanitizeRelativePath(requestedPath);
   if (!relativePath) {
     throw new Error("Invalid file path.");
   }
 
-  const filename = path.basename(relativePath);
+  const name = path.basename(relativePath);
   const fullPath = path.join(STORAGE_DIR, slug, relativePath);
 
-  if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
+  if (!fs.existsSync(fullPath)) {
     throw new Error("File not found.");
   }
 
+  const stats = fs.statSync(fullPath);
   return {
     slug,
     relativePath,
-    filename,
-    fullPath
+    filename: name,
+    fullPath,
+    kind: stats.isDirectory() ? "directory" : "file"
   };
+}
+
+async function resolveStoredFile(slug, requestedFilename, storage) {
+  const fileInfo = await resolveStoredEntry(slug, requestedFilename, storage);
+  if (fileInfo.kind !== "file") {
+    throw new Error("File not found.");
+  }
+  return fileInfo;
+}
+
+async function authenticateEndpointRequest(req, res, slug, storage) {
+  const keyRecord = await storage.findKeyBySlug(slug);
+  if (!keyRecord) {
+    sendJson(res, 404, { error: "Unknown upload endpoint." });
+    return null;
+  }
+
+  if (keyRecord.revoked) {
+    sendJson(res, 403, { error: "This endpoint key has been revoked." });
+    return null;
+  }
+
+  const suppliedKey = extractApiKey(req);
+  if (!suppliedKey || !verifyApiKey(suppliedKey, keyRecord.apiKeyHash, keyRecord.apiKeySalt)) {
+    sendJson(res, 401, { error: "Invalid or missing API key." });
+    return null;
+  }
+
+  return keyRecord;
 }
 
 function extractApiKey(req) {
@@ -156,6 +189,8 @@ function parseMultipartUpload(bodyBuffer, boundary) {
 
 module.exports = {
   handleUpload,
+  handleCompanionConfig,
   sendStoredFile,
+  resolveStoredEntry,
   resolveStoredFile
 };

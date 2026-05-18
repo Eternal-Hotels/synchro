@@ -39,6 +39,14 @@ const { hashApiKey, hashPassword } = require("../utils/security");
 // Using a module-level variable is safe here because Node runs single-threaded.
 let db;
 
+const DEFAULT_APP_SETTINGS = {
+  reportDigestEnabled: false,
+  reportDigestTime: "07:00",
+  reportDigestRecipients: "",
+  reportDigestLastSentAt: "",
+  reportMonthEndLastSentMonth: ""
+};
+
 // Open the database and bring the schema up to date.
 // This runs once at server startup before the HTTP server starts accepting connections.
 async function initializeStorage() {
@@ -128,10 +136,25 @@ async function listKeysForUser(user) {
 
   return keys
     .filter((record) => user.permissions.manageKeys || user.endpointScopes.includes(record.slug))
-    .map((record) => hydrateKeyRecord(record));
+    .map((record) => hydrateKeyRecord(record, {
+      includeAgentCredentials: user.permissions.manageKeys
+    }));
 }
 
-async function createKeyRecord(rawName) {
+async function listKeysByPaymentSystem(paymentSystem) {
+  const normalizedPaymentSystem = normalizePaymentSystem(paymentSystem);
+  if (!normalizedPaymentSystem) {
+    return [];
+  }
+
+  const keys = await loadKeys();
+  return keys
+    .filter((record) => record.paymentSystem === normalizedPaymentSystem)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((record) => hydrateKeyRecord(record, { includeAgentCredentials: true }));
+}
+
+async function createKeyRecord(rawName, rawPaymentSystem, rawAgentConfig = {}) {
   // Creating an endpoint means generating a one-time plaintext key, storing only
   // its salted hash, and ensuring one folder exists on disk.
   const keys = await loadKeys();
@@ -139,9 +162,13 @@ async function createKeyRecord(rawName) {
   const slug = buildUniqueSlug(baseName, keys);
   const apiKey = crypto.randomBytes(24).toString("hex");
   const apiKeySalt = crypto.randomBytes(16).toString("hex");
+  const agentConfig = normalizeVerifoneAgentConfig(rawAgentConfig);
   const record = {
     name: baseName,
     slug,
+    paymentSystem: normalizePaymentSystem(rawPaymentSystem) || "gilbarco_passport",
+    verifoneUsername: agentConfig.verifoneUsername,
+    verifonePassword: agentConfig.verifonePassword,
     apiKeyHash: hashApiKey(apiKey, apiKeySalt),
     apiKeySalt,
     revoked: false,
@@ -154,8 +181,9 @@ async function createKeyRecord(rawName) {
   await dbRun(
     `INSERT INTO endpoint_keys (
       slug, name, api_key, api_key_hash, api_key_salt, revoked,
+      payment_system, verifone_username, verifone_password,
       created_at, last_used_at, rotated_at, rotation_count
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       record.slug,
       record.name,
@@ -163,6 +191,9 @@ async function createKeyRecord(rawName) {
       record.apiKeyHash,
       record.apiKeySalt,
       0,
+      record.paymentSystem,
+      record.verifoneUsername,
+      record.verifonePassword,
       record.createdAt,
       null,
       null,
@@ -186,6 +217,54 @@ async function updateKeyStatus(slug, revoked) {
   record.revoked = revoked;
   await dbRun("UPDATE endpoint_keys SET revoked = ? WHERE slug = ?", [revoked ? 1 : 0, slug]);
   return hydrateKeyRecord(record);
+}
+
+async function updateKeyPaymentSystem(slug, paymentSystem) {
+  const record = await findKeyBySlug(slug);
+  if (!record) {
+    throw httpError(404, "Endpoint key not found.");
+  }
+
+  const normalizedPaymentSystem = normalizePaymentSystem(paymentSystem);
+  if (!normalizedPaymentSystem) {
+    throw httpError(400, "Invalid payment system.");
+  }
+
+  await dbRun("UPDATE endpoint_keys SET payment_system = ? WHERE slug = ?", [normalizedPaymentSystem, slug]);
+  return hydrateKeyRecord({
+    ...record,
+    paymentSystem: normalizedPaymentSystem
+  });
+}
+
+async function updateKeyAgentConfig(slug, payload) {
+  const record = await findKeyBySlug(slug);
+  if (!record) {
+    throw httpError(404, "Endpoint key not found.");
+  }
+
+  const agentConfig = normalizeVerifoneAgentConfig(payload);
+  await dbRun(
+    "UPDATE endpoint_keys SET verifone_username = ?, verifone_password = ? WHERE slug = ?",
+    [agentConfig.verifoneUsername, agentConfig.verifonePassword, slug]
+  );
+
+  return hydrateKeyRecord({
+    ...record,
+    verifoneUsername: agentConfig.verifoneUsername,
+    verifonePassword: agentConfig.verifonePassword
+  }, {
+    includeAgentCredentials: true
+  });
+}
+
+async function getCompanionConfigBySlug(slug) {
+  const record = await findKeyBySlug(slug);
+  if (!record) {
+    throw httpError(404, "Endpoint key not found.");
+  }
+
+  return buildCompanionConfig(record);
 }
 
 async function rotateKeyRecord(slug) {
@@ -241,6 +320,8 @@ async function findKeyBySlug(slug) {
   // Keep SQL-specific column names out of the rest of the app by normalizing here.
   const row = await dbGet(
     `SELECT slug, name, api_key_hash AS apiKeyHash, api_key_salt AS apiKeySalt,
+            payment_system AS paymentSystem,
+            verifone_username AS verifoneUsername, verifone_password AS verifonePassword,
             revoked, created_at AS createdAt, last_used_at AS lastUsedAt,
             rotated_at AS rotatedAt, rotation_count AS rotationCount
      FROM endpoint_keys
@@ -427,6 +508,9 @@ function directoryListingForSlug(slug, requestedPath = "") {
         name: entry.name,
         path: normalizedPath,
         kind: entry.isDirectory() ? "directory" : "file",
+        canParseReport: entry.isDirectory()
+          ? directoryLooksLikeVerifoneReport(fullPath)
+          : /\.(html?|pdf)$/i.test(entry.name),
         createdAt: stats.birthtime.toISOString(),
         sizeBytes: stats.size,
         sizeLabel: formatBytes(stats.size),
@@ -450,13 +534,36 @@ function directoryListingForSlug(slug, requestedPath = "") {
   };
 }
 
-function hydrateKeyRecord(record) {
+function directoryLooksLikeVerifoneReport(directoryPath) {
+  if (!fs.existsSync(directoryPath) || !fs.statSync(directoryPath).isDirectory()) {
+    return false;
+  }
+
+  const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+  if (entries.some((entry) => entry.isFile() && /\.html?$/i.test(entry.name))) {
+    return true;
+  }
+
+  return entries.some((entry) => (
+    entry.isDirectory()
+      && /^(DR|MR)$/i.test(entry.name)
+      && fs.readdirSync(path.join(directoryPath, entry.name), { withFileTypes: true }).some((child) => (
+        child.isFile() && /\.html?$/i.test(child.name)
+      ))
+  ));
+}
+
+function hydrateKeyRecord(record, options = {}) {
   // "Hydrate" means enriching a raw stored record with derived values for the UI.
+  const includeAgentCredentials = Boolean(options.includeAgentCredentials);
   const endpointDir = path.join(STORAGE_DIR, record.slug);
   ensureDirectory(endpointDir);
   return {
     name: record.name,
     slug: record.slug,
+    paymentSystem: normalizePaymentSystem(record.paymentSystem) || "gilbarco_passport",
+    verifoneUsername: includeAgentCredentials ? (record.verifoneUsername || "") : "",
+    verifonePassword: includeAgentCredentials ? (record.verifonePassword || "") : "",
     revoked: record.revoked,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt || "",
@@ -500,6 +607,8 @@ async function loadKeys() {
   // Load the full endpoint list when callers need to filter or sort it in JavaScript.
   const rows = await dbAll(
     `SELECT slug, name, api_key_hash AS apiKeyHash, api_key_salt AS apiKeySalt,
+            payment_system AS paymentSystem,
+            verifone_username AS verifoneUsername, verifone_password AS verifonePassword,
             revoked, created_at AS createdAt, last_used_at AS lastUsedAt,
             rotated_at AS rotatedAt, rotation_count AS rotationCount
      FROM endpoint_keys`
@@ -683,6 +792,9 @@ async function createSchema() {
       api_key TEXT NOT NULL UNIQUE,
       api_key_hash TEXT NOT NULL,
       api_key_salt TEXT NOT NULL,
+      payment_system TEXT NOT NULL DEFAULT 'gilbarco_passport',
+      verifone_username TEXT NOT NULL DEFAULT '',
+      verifone_password TEXT NOT NULL DEFAULT '',
       revoked INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       last_used_at TEXT,
@@ -712,6 +824,29 @@ async function createSchema() {
       FOREIGN KEY (endpoint_slug) REFERENCES endpoint_keys(slug) ON DELETE CASCADE
     )`
   );
+
+  await dbRun(
+    `CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL
+    )`
+  );
+
+  await dbRun(
+    `CREATE TABLE IF NOT EXISTS upload_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      endpoint_slug TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      bytes INTEGER NOT NULL DEFAULT 0,
+      received_at TEXT NOT NULL,
+      FOREIGN KEY (endpoint_slug) REFERENCES endpoint_keys(slug) ON DELETE CASCADE
+    )`
+  );
+
+  await dbRun(
+    `CREATE INDEX IF NOT EXISTS idx_upload_events_received_at
+     ON upload_events (received_at)`
+  );
 }
 
 async function migrateEndpointKeySchema() {
@@ -738,6 +873,21 @@ async function migrateEndpointKeySchema() {
   if (!columns.has("rotation_count")) {
     await dbRun("ALTER TABLE endpoint_keys ADD COLUMN rotation_count INTEGER NOT NULL DEFAULT 0");
   }
+  if (!columns.has("payment_system")) {
+    await dbRun("ALTER TABLE endpoint_keys ADD COLUMN payment_system TEXT NOT NULL DEFAULT 'gilbarco_passport'");
+  }
+  if (!columns.has("verifone_username")) {
+    await dbRun("ALTER TABLE endpoint_keys ADD COLUMN verifone_username TEXT NOT NULL DEFAULT ''");
+  }
+  if (!columns.has("verifone_password")) {
+    await dbRun("ALTER TABLE endpoint_keys ADD COLUMN verifone_password TEXT NOT NULL DEFAULT ''");
+  }
+
+  await dbRun(
+    `UPDATE endpoint_keys
+     SET payment_system = 'gilbarco_passport'
+     WHERE payment_system IS NULL OR TRIM(payment_system) = ''`
+  );
 
   const insecureRows = await dbAll(
     `SELECT slug, api_key AS apiKey
@@ -777,8 +927,9 @@ async function importLegacyJsonData() {
       await dbRun(
         `INSERT INTO endpoint_keys (
           slug, name, api_key, api_key_hash, api_key_salt, revoked,
+          payment_system, verifone_username, verifone_password,
           created_at, last_used_at, rotated_at, rotation_count
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           String(entry.slug),
           String(entry.name),
@@ -786,6 +937,9 @@ async function importLegacyJsonData() {
           hashApiKey(String(entry.apiKey), apiKeySalt),
           apiKeySalt,
           entry.revoked ? 1 : 0,
+          "gilbarco_passport",
+          "",
+          "",
           String(entry.createdAt),
           null,
           null,
@@ -848,9 +1002,13 @@ async function importLegacyJsonData() {
 // SQLite has no native boolean or null-safe types — booleans are stored as 0/1
 // integers, and missing values come back as null.
 function normalizeKeyRecord(row) {
+  const agentConfig = normalizeVerifoneAgentConfig(row);
   return {
     slug: row.slug,
     name: row.name,
+    paymentSystem: normalizePaymentSystem(row.paymentSystem) || "gilbarco_passport",
+    verifoneUsername: agentConfig.verifoneUsername,
+    verifonePassword: agentConfig.verifonePassword,
     // Fall back to empty string if the column is null (pre-migration databases).
     apiKeyHash: row.apiKeyHash || "",
     apiKeySalt: row.apiKeySalt || "",
@@ -865,12 +1023,268 @@ function normalizeKeyRecord(row) {
   };
 }
 
+function normalizePaymentSystem(paymentSystem) {
+  const normalized = String(paymentSystem || "").trim().toLowerCase();
+  if (normalized === "gilbarco_passport" || normalized === "verifone_commander") {
+    return normalized;
+  }
+  return "";
+}
+
+function normalizeVerifoneAgentConfig(payload) {
+  return {
+    verifoneUsername: String(payload && payload.verifoneUsername ? payload.verifoneUsername : "").trim(),
+    verifonePassword: String(payload && payload.verifonePassword ? payload.verifonePassword : "")
+  };
+}
+
+function buildCompanionConfig(record) {
+  const paymentSystem = normalizePaymentSystem(record.paymentSystem) || "gilbarco_passport";
+  return {
+    endpoint: record.slug,
+    paymentSystem,
+    profile: paymentSystem === "verifone_commander" ? "verifone_commander" : "default",
+    verifoneUsername: paymentSystem === "verifone_commander" ? (record.verifoneUsername || "") : "",
+    verifonePassword: paymentSystem === "verifone_commander" ? (record.verifonePassword || "") : ""
+  };
+}
+
 // Update the last_used_at timestamp for an endpoint whenever an upload succeeds.
 // This creates an audit trail so administrators can see which endpoints are active.
 async function recordKeyUsage(slug) {
   // new Date().toISOString() gives an ISO 8601 string like "2026-05-07T15:30:00.000Z".
   const lastUsedAt = new Date().toISOString();
   await dbRun("UPDATE endpoint_keys SET last_used_at = ? WHERE slug = ?", [lastUsedAt, slug]);
+}
+
+async function recordUploadEvent(slug, relativePath, bytes) {
+  const normalizedPath = String(relativePath || "").replace(/\\/g, "/");
+  await dbRun(
+    `INSERT INTO upload_events (endpoint_slug, relative_path, bytes, received_at)
+     VALUES (?, ?, ?, ?)`,
+    [slug, normalizedPath, Number(bytes || 0), new Date().toISOString()]
+  );
+}
+
+async function listReportUploadsSince(sinceIso, untilIso) {
+  const since = String(sinceIso || "").trim();
+  const until = String(untilIso || "").trim() || new Date().toISOString();
+  if (!since) {
+    return [];
+  }
+
+  const eventRows = await dbAll(
+    `SELECT endpoint_slug AS endpointSlug,
+            relative_path AS relativePath,
+            bytes,
+            received_at AS receivedAt
+     FROM upload_events
+     WHERE received_at > ?
+       AND received_at <= ?
+       AND (
+         LOWER(relative_path) LIKE '%.pdf'
+         OR LOWER(relative_path) LIKE '%.html'
+         OR LOWER(relative_path) LIKE '%.htm'
+       )
+     ORDER BY received_at ASC`,
+    [since, until]
+  );
+
+  const fallbackRows = listReportFilesByMtimeSince(since, until);
+  const dedupedByPath = new Map();
+
+  for (const row of eventRows) {
+    const key = `${String(row.endpointSlug || "")}|${String(row.relativePath || "").toLowerCase()}`;
+    dedupedByPath.set(key, {
+      endpointSlug: row.endpointSlug,
+      relativePath: row.relativePath,
+      bytes: Number(row.bytes || 0),
+      receivedAt: row.receivedAt
+    });
+  }
+
+  for (const fileRow of fallbackRows) {
+    const key = `${String(fileRow.endpointSlug || "")}|${String(fileRow.relativePath || "").toLowerCase()}`;
+    if (!dedupedByPath.has(key)) {
+      dedupedByPath.set(key, fileRow);
+    }
+  }
+
+  return Array.from(dedupedByPath.values())
+    .sort((a, b) => String(a.receivedAt || "").localeCompare(String(b.receivedAt || "")));
+}
+
+function listReportFilesByMtimeSince(sinceIso, untilIso) {
+  const sinceMs = Date.parse(String(sinceIso || ""));
+  const untilMs = Date.parse(String(untilIso || ""));
+  if (Number.isNaN(sinceMs) || Number.isNaN(untilMs)) {
+    return [];
+  }
+
+  const endpointDirs = fs.existsSync(STORAGE_DIR)
+    ? fs.readdirSync(STORAGE_DIR, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    : [];
+
+  const rows = [];
+  for (const endpointSlug of endpointDirs) {
+    const endpointDir = path.join(STORAGE_DIR, endpointSlug);
+    collectReportFilesInDirectory(endpointSlug, endpointDir, "", sinceMs, untilMs, rows);
+  }
+
+  return rows;
+}
+
+function collectReportFilesInDirectory(endpointSlug, absoluteDir, relativeDir, sinceMs, untilMs, sink) {
+  if (!fs.existsSync(absoluteDir) || !fs.statSync(absoluteDir).isDirectory()) {
+    return;
+  }
+
+  const entries = fs.readdirSync(absoluteDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const nextRelativePath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+    const absolutePath = path.join(absoluteDir, entry.name);
+
+    if (entry.isDirectory()) {
+      collectReportFilesInDirectory(endpointSlug, absolutePath, nextRelativePath, sinceMs, untilMs, sink);
+      continue;
+    }
+
+    if (!entry.isFile() || !/\.(pdf|html?|htm)$/i.test(entry.name)) {
+      continue;
+    }
+
+    const stats = fs.statSync(absolutePath);
+    const modifiedAtMs = stats.mtime.getTime();
+    if (modifiedAtMs <= sinceMs || modifiedAtMs > untilMs) {
+      continue;
+    }
+
+    sink.push({
+      endpointSlug,
+      relativePath: nextRelativePath.replace(/\\/g, "/"),
+      bytes: Number(stats.size || 0),
+      receivedAt: stats.mtime.toISOString()
+    });
+  }
+}
+
+async function getAppSettings() {
+  const rows = await dbAll(
+    `SELECT setting_key AS settingKey, setting_value AS settingValue
+     FROM app_settings`
+  );
+
+  const settings = { ...DEFAULT_APP_SETTINGS };
+  for (const row of rows) {
+    if (row.settingKey === "report_digest_enabled") {
+      settings.reportDigestEnabled = row.settingValue === "1";
+    } else if (row.settingKey === "report_digest_time") {
+      settings.reportDigestTime = normalizeDigestTime(row.settingValue);
+    } else if (row.settingKey === "report_digest_recipients") {
+      settings.reportDigestRecipients = row.settingValue || "";
+    } else if (row.settingKey === "report_digest_last_sent_at") {
+      settings.reportDigestLastSentAt = row.settingValue || "";
+    } else if (row.settingKey === "report_month_end_last_sent_month") {
+      settings.reportMonthEndLastSentMonth = normalizeMonthKey(row.settingValue);
+    }
+  }
+
+  return settings;
+}
+
+async function updateAppSettings(payload = {}) {
+  const next = await getAppSettings();
+
+  if (Object.prototype.hasOwnProperty.call(payload, "reportDigestEnabled")) {
+    next.reportDigestEnabled = Boolean(payload.reportDigestEnabled);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "reportDigestTime")) {
+    next.reportDigestTime = normalizeDigestTime(payload.reportDigestTime);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "reportDigestRecipients")) {
+    next.reportDigestRecipients = normalizeRecipientText(payload.reportDigestRecipients);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "reportDigestLastSentAt")) {
+    const value = String(payload.reportDigestLastSentAt || "").trim();
+    if (value) {
+      const parsed = Date.parse(value);
+      if (Number.isNaN(parsed)) {
+        throw httpError(400, "Invalid last-sent timestamp.");
+      }
+      next.reportDigestLastSentAt = new Date(parsed).toISOString();
+    } else {
+      next.reportDigestLastSentAt = "";
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "reportMonthEndLastSentMonth")) {
+    next.reportMonthEndLastSentMonth = normalizeMonthKey(payload.reportMonthEndLastSentMonth);
+  }
+
+  await upsertSetting("report_digest_enabled", next.reportDigestEnabled ? "1" : "0");
+  await upsertSetting("report_digest_time", next.reportDigestTime);
+  await upsertSetting("report_digest_recipients", next.reportDigestRecipients);
+  await upsertSetting("report_digest_last_sent_at", next.reportDigestLastSentAt);
+  await upsertSetting("report_month_end_last_sent_month", next.reportMonthEndLastSentMonth);
+
+  return next;
+}
+
+function normalizeRecipientText(rawValue) {
+  const pieces = String(rawValue || "")
+    .split(/[\n,;]+/)
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  const deduped = Array.from(new Set(pieces));
+  for (const email of deduped) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw httpError(400, `Invalid email address in recipients: ${email}`);
+    }
+  }
+
+  return deduped.join("\n");
+}
+
+function normalizeDigestTime(rawValue) {
+  const value = String(rawValue || "").trim() || DEFAULT_APP_SETTINGS.reportDigestTime;
+  const match = value.match(/^(\d{2}):(\d{2})$/);
+  if (!match) {
+    throw httpError(400, "Digest time must be in HH:MM format.");
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    throw httpError(400, "Digest time must be a valid 24-hour time.");
+  }
+
+  return `${match[1]}:${match[2]}`;
+}
+
+function normalizeMonthKey(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) {
+    return "";
+  }
+  if (!/^\d{4}-\d{2}$/.test(value)) {
+    throw httpError(400, "Month-end sent month must be in YYYY-MM format.");
+  }
+  return value;
+}
+
+async function upsertSetting(settingKey, settingValue) {
+  await dbRun(
+    `INSERT INTO app_settings (setting_key, setting_value)
+     VALUES (?, ?)
+     ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value`,
+    [settingKey, String(settingValue || "")]
+  );
 }
 
 // Generate a non-secret placeholder to store in the api_key column.
@@ -952,11 +1366,15 @@ module.exports = {
   initializeStorage,
   ensureBootstrapAdmin,
   listKeysForUser,
+  listKeysByPaymentSystem,
   createKeyRecord,
   updateKeyStatus,
+  updateKeyPaymentSystem,
+  updateKeyAgentConfig,
   rotateKeyRecord,
   deleteKeyRecord,
   findKeyBySlug,
+  getCompanionConfigBySlug,
   listDirectoryForKey,
   deleteStoredEntryForKey,
   listUsersForClient,
@@ -966,6 +1384,10 @@ module.exports = {
   findUserById,
   findUserByUsername,
   recordKeyUsage,
+  recordUploadEvent,
+  listReportUploadsSince,
+  getAppSettings,
+  updateAppSettings,
   hydrateUserForPermissions,
   sanitizeUserForClient
 };

@@ -10,6 +10,7 @@ from sync_client import (
     append_scheduled_log,
     ensure_test_file,
     env_path,
+    fetch_companion_config,
     profile_choices,
     profile_description,
     profile_label,
@@ -18,6 +19,7 @@ from sync_client import (
     scheduled_log_path,
     save_env,
     sync_folder,
+    run_monthly_verifone_export,
     upload_file,
 )
 
@@ -43,6 +45,18 @@ class SynchroCompanionApp:
         self.api_key_var = tk.StringVar(value=config["api_key"])
         self.folder_var = tk.StringVar(value=config["folder"])
         self.profile_var = tk.StringVar(value=config["profile"])
+        self.verifone_username_var = tk.StringVar(value=config["verifone_username"])
+        self.verifone_password_var = tk.StringVar(value=config["verifone_password"])
+        self.verifone_rnr_path_var = tk.StringVar(value=config["verifone_rnr_path"])
+        self.verifone_rnr_ip_var = tk.StringVar(value=config["verifone_rnr_ip"])
+        self.verifone_rnr_report_var = tk.StringVar(value=config["verifone_rnr_report"])
+        self.verifone_export_dir_var = tk.StringVar(value=config["verifone_export_dir"])
+        self.monthly_exe_path_var = tk.StringVar(value=config["monthly_exe_path"])
+        self.monthly_ip_var = tk.StringVar(value=config["monthly_ip"])
+        self.monthly_report_var = tk.StringVar(value=config["monthly_report"])
+        self.monthly_user_var = tk.StringVar(value=config["monthly_user"])
+        self.monthly_password_var = tk.StringVar(value=config["monthly_password"])
+        self.monthly_export_dir_var = tk.StringVar(value=config["monthly_export_dir"])
         self.profile_label_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Ready.")
 
@@ -91,11 +105,58 @@ class SynchroCompanionApp:
         self.profile_hint = ttk.Label(profile_frame, text="")
         self.profile_hint.grid(row=1, column=1, sticky="w", padx=(12, 0), pady=(4, 0))
 
+        verifone_frame = ttk.LabelFrame(top, text="Verifone Commander", padding=12)
+        verifone_frame.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        verifone_frame.columnconfigure(1, weight=1)
+        ttk.Label(verifone_frame, text="Commander Username").grid(row=0, column=0, sticky="w", pady=4)
+        self.verifone_username_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_username_var)
+        self.verifone_username_entry.grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Commander Password").grid(row=1, column=0, sticky="w", pady=4)
+        self.verifone_password_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_password_var, show="*")
+        self.verifone_password_entry.grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="RNR.exe Path").grid(row=2, column=0, sticky="w", pady=4)
+        self.verifone_rnr_path_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_rnr_path_var)
+        self.verifone_rnr_path_entry.grid(row=2, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Commander IP").grid(row=3, column=0, sticky="w", pady=4)
+        self.verifone_rnr_ip_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_rnr_ip_var)
+        self.verifone_rnr_ip_entry.grid(row=3, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Report Name").grid(row=4, column=0, sticky="w", pady=4)
+        self.verifone_rnr_report_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_rnr_report_var)
+        self.verifone_rnr_report_entry.grid(row=4, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Export Folder").grid(row=5, column=0, sticky="w", pady=4)
+        self.verifone_export_dir_entry = ttk.Entry(verifone_frame, textvariable=self.verifone_export_dir_var)
+        self.verifone_export_dir_entry.grid(row=5, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly EXE Path").grid(row=6, column=0, sticky="w", pady=4)
+        self.monthly_exe_path_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_exe_path_var)
+        self.monthly_exe_path_entry.grid(row=6, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly IP").grid(row=7, column=0, sticky="w", pady=4)
+        self.monthly_ip_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_ip_var)
+        self.monthly_ip_entry.grid(row=7, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly Report").grid(row=8, column=0, sticky="w", pady=4)
+        self.monthly_report_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_report_var)
+        self.monthly_report_entry.grid(row=8, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly Username").grid(row=9, column=0, sticky="w", pady=4)
+        self.monthly_user_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_user_var)
+        self.monthly_user_entry.grid(row=9, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly Password").grid(row=10, column=0, sticky="w", pady=4)
+        self.monthly_password_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_password_var, show="*")
+        self.monthly_password_entry.grid(row=10, column=1, sticky="ew", pady=4)
+        ttk.Label(verifone_frame, text="Monthly Export Folder").grid(row=11, column=0, sticky="w", pady=4)
+        self.monthly_export_dir_entry = ttk.Entry(verifone_frame, textvariable=self.monthly_export_dir_var)
+        self.monthly_export_dir_entry.grid(row=11, column=1, sticky="ew", pady=4)
+        self.verifone_hint = ttk.Label(
+            verifone_frame,
+            text="These values are only used for Verifone Commander endpoints and can be pulled from the Synchro web API."
+        )
+        self.verifone_hint.grid(row=12, column=1, sticky="w", pady=(4, 0))
+
         actions = ttk.Frame(top)
-        actions.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(12, 0))
+        actions.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(12, 0))
         ttk.Button(actions, text="Save Settings", command=self.save_settings).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(actions, text="Upload Test File", command=self.upload_test_file).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(actions, text="Sync Folder", command=self.sync_selected_folder).grid(row=0, column=2)
+        ttk.Button(actions, text="Fetch Endpoint Config", command=self.fetch_endpoint_config).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(actions, text="Upload Test File", command=self.upload_test_file).grid(row=0, column=2, padx=(0, 8))
+        ttk.Button(actions, text="Sync Folder", command=self.sync_selected_folder).grid(row=0, column=3)
+        ttk.Button(actions, text="Run Monthly Test", command=self.run_monthly_test).grid(row=0, column=4, padx=(8, 0))
 
         log_panel = ttk.Frame(self.root, padding=(16, 0, 16, 16))
         log_panel.grid(row=1, column=0, sticky="nsew")
@@ -123,11 +184,28 @@ class SynchroCompanionApp:
             "SYNCHRO_ENDPOINT": self.endpoint_var.get().strip(),
             "SYNCHRO_API_KEY": self.api_key_var.get().strip(),
             "SYNCHRO_FOLDER": self.folder_var.get().strip(),
-            "SYNCHRO_PROFILE": self.profile_var.get().strip() or "default"
+            "SYNCHRO_PROFILE": self.profile_var.get().strip() or "default",
+            "SYNCHRO_VERIFONE_USERNAME": self.verifone_username_var.get().strip(),
+            "SYNCHRO_VERIFONE_PASSWORD": self.verifone_password_var.get(),
+            "SYNCHRO_VERIFONE_RNR_PATH": self.verifone_rnr_path_var.get().strip(),
+            "SYNCHRO_VERIFONE_RNR_IP": self.verifone_rnr_ip_var.get().strip(),
+            "SYNCHRO_VERIFONE_RNR_REPORT": self.verifone_rnr_report_var.get().strip(),
+            "SYNCHRO_VERIFONE_EXPORT_DIR": self.verifone_export_dir_var.get().strip(),
+            "SYNCHRO_MONTHLY_EXE_PATH": self.monthly_exe_path_var.get().strip(),
+            "SYNCHRO_MONTHLY_IP": self.monthly_ip_var.get().strip(),
+            "SYNCHRO_MONTHLY_REPORT": self.monthly_report_var.get().strip(),
+            "SYNCHRO_MONTHLY_USER": self.monthly_user_var.get().strip(),
+            "SYNCHRO_MONTHLY_PASSWORD": self.monthly_password_var.get(),
+            "SYNCHRO_MONTHLY_EXPORT_DIR": self.monthly_export_dir_var.get().strip()
         }
         save_env(env)
         self.write_log("Saved settings to companion/.env")
         self.status_var.set("Settings saved.")
+
+    def fetch_endpoint_config(self):
+        if self.is_busy:
+            return
+        self.run_in_background("Fetching endpoint config...", self._fetch_endpoint_config)
 
     def upload_test_file(self):
         # The busy guard prevents multiple overlapping network jobs from fighting
@@ -140,6 +218,11 @@ class SynchroCompanionApp:
         if self.is_busy:
             return
         self.run_in_background("Syncing folder...", self._sync_selected_folder)
+
+    def run_monthly_test(self):
+        if self.is_busy:
+            return
+        self.run_in_background("Running monthly test export...", self._run_monthly_test)
 
     def _upload_test_file(self):
         # This method runs on a worker thread so the window stays responsive.
@@ -162,7 +245,10 @@ class SynchroCompanionApp:
         self.save_settings()
 
         def progress(item):
-            self.log_queue.put(f"{item['status']} {item['relative_path']}")
+            if item.get("skipped"):
+                self.log_queue.put(f"SKIP {item['relative_path']} ({item.get('reason', 'unchanged')})")
+            else:
+                self.log_queue.put(f"{item['status']} {item['relative_path']}")
 
         results = sync_folder(
             config["server"],
@@ -170,11 +256,56 @@ class SynchroCompanionApp:
             config["api_key"],
             config["folder"],
             progress_callback=progress,
-            profile=config["profile"]
+            profile=config["profile"],
+            verifone_username=config["verifone_username"],
+            verifone_password=config["verifone_password"],
+            verifone_rnr_path=config["verifone_rnr_path"],
+            verifone_rnr_ip=config["verifone_rnr_ip"],
+            verifone_rnr_report=config["verifone_rnr_report"],
+            verifone_export_dir=config["verifone_export_dir"],
+            monthly_exe_path=config["monthly_exe_path"],
+            monthly_ip=config["monthly_ip"],
+            monthly_report=config["monthly_report"],
+            monthly_user=config["monthly_user"],
+            monthly_password=config["monthly_password"],
+            monthly_export_dir=config["monthly_export_dir"],
+            status_callback=self.log_queue.put
         )
         success_count = sum(1 for item in results if 200 <= item["status"] < 300)
+        skipped_count = sum(1 for item in results if item.get("skipped"))
         self.log_queue.put(f"Profile: {config['profile']}")
-        self.root.after(0, lambda: self.status_var.set(f"Synced {success_count}/{len(results)} files."))
+        self.root.after(
+            0,
+            lambda: self.status_var.set(
+                f"Uploaded {success_count}, skipped {skipped_count} unchanged, matched {len(results)} files."
+            )
+        )
+
+    def _run_monthly_test(self):
+        config = self.current_config()
+        self.save_settings()
+        export_path = run_monthly_verifone_export(
+            monthly_exe_path=config["monthly_exe_path"],
+            monthly_ip=config["monthly_ip"],
+            monthly_report=config["monthly_report"],
+            monthly_user=config["monthly_user"],
+            monthly_password=config["monthly_password"],
+            monthly_export_dir=config["monthly_export_dir"],
+            status_callback=self.log_queue.put,
+            label="Monthly test"
+        )
+        self.log_queue.put(f"Monthly test output: {export_path}")
+        self.root.after(0, lambda: self.status_var.set("Monthly test export completed."))
+
+    def _fetch_endpoint_config(self):
+        server = self.server_var.get().strip()
+        endpoint = self.endpoint_var.get().strip()
+        api_key = self.api_key_var.get().strip()
+        if not endpoint or not api_key:
+            raise SystemExit("Enter an endpoint and API key before fetching remote config.")
+
+        remote = fetch_companion_config(server, endpoint, api_key)
+        self.root.after(0, lambda: self._apply_remote_config(remote))
 
     def run_in_background(self, busy_message, target):
         # Tkinter is single-threaded: long-running work must leave the main thread
@@ -211,6 +342,18 @@ class SynchroCompanionApp:
             api_key=self.api_key_var.get().strip(),
             folder=self.folder_var.get().strip(),
             profile=self.profile_var.get().strip() or "default",
+            verifone_username=self.verifone_username_var.get().strip(),
+            verifone_password=self.verifone_password_var.get(),
+            verifone_rnr_path=self.verifone_rnr_path_var.get().strip(),
+            verifone_rnr_ip=self.verifone_rnr_ip_var.get().strip(),
+            verifone_rnr_report=self.verifone_rnr_report_var.get().strip(),
+            verifone_export_dir=self.verifone_export_dir_var.get().strip(),
+            monthly_exe_path=self.monthly_exe_path_var.get().strip(),
+            monthly_ip=self.monthly_ip_var.get().strip(),
+            monthly_report=self.monthly_report_var.get().strip(),
+            monthly_user=self.monthly_user_var.get().strip(),
+            monthly_password=self.monthly_password_var.get(),
+            monthly_export_dir=self.monthly_export_dir_var.get().strip(),
             persist=False,
             require_credentials=True
         )
@@ -236,6 +379,41 @@ class SynchroCompanionApp:
         current_profile = self.profile_var.get() or "default"
         self.profile_label_var.set(profile_label(current_profile))
         self.profile_hint.configure(text=profile_description(current_profile))
+        verifone_state = "normal" if current_profile == "verifone_commander" else "disabled"
+        self.verifone_username_entry.configure(state=verifone_state)
+        self.verifone_password_entry.configure(state=verifone_state)
+        self.verifone_rnr_path_entry.configure(state=verifone_state)
+        self.verifone_rnr_ip_entry.configure(state=verifone_state)
+        self.verifone_rnr_report_entry.configure(state=verifone_state)
+        self.verifone_export_dir_entry.configure(state=verifone_state)
+        self.monthly_exe_path_entry.configure(state=verifone_state)
+        self.monthly_ip_entry.configure(state=verifone_state)
+        self.monthly_report_entry.configure(state=verifone_state)
+        self.monthly_user_entry.configure(state=verifone_state)
+        self.monthly_password_entry.configure(state=verifone_state)
+        self.monthly_export_dir_entry.configure(state=verifone_state)
+        if current_profile == "verifone_commander":
+            self.verifone_hint.configure(
+                text="These values will be passed through Synchro Companion for Verifone Commander automation."
+            )
+        else:
+            self.verifone_hint.configure(
+                text="Stored for later use, but only active when the sync profile is Verifone Commander."
+            )
+
+    def _apply_remote_config(self, remote):
+        self.profile_var.set(remote["profile"] or "default")
+        self.verifone_username_var.set(remote["verifone_username"])
+        self.verifone_password_var.set(remote["verifone_password"])
+        self.refresh_profile_button()
+        self.save_settings()
+        payment_system = remote.get("payment_system") or "unknown"
+        self.write_log(
+            f"Fetched endpoint config for {remote['endpoint']} ({payment_system}); profile set to {profile_label(self.profile_var.get())}."
+        )
+        if self.profile_var.get() == "verifone_commander":
+            self.write_log("Applied Verifone Commander username/password from the Synchro web API.")
+        self.status_var.set("Endpoint config fetched.")
 
     def write_log(self, message):
         # The text widget is normally read-only; we briefly enable it to append a line.
@@ -310,19 +488,45 @@ def run_scheduled_sync():
             config["endpoint"],
             config["api_key"],
             config["folder"],
-            profile=config["profile"]
+            profile=config["profile"],
+            verifone_username=config["verifone_username"],
+            verifone_password=config["verifone_password"],
+            verifone_rnr_path=config["verifone_rnr_path"],
+            verifone_rnr_ip=config["verifone_rnr_ip"],
+            verifone_rnr_report=config["verifone_rnr_report"],
+            verifone_export_dir=config["verifone_export_dir"],
+            monthly_exe_path=config["monthly_exe_path"],
+            monthly_ip=config["monthly_ip"],
+            monthly_report=config["monthly_report"],
+            monthly_user=config["monthly_user"],
+            monthly_password=config["monthly_password"],
+            monthly_export_dir=config["monthly_export_dir"],
+            status_callback=append_scheduled_log
         )
         ok_count = sum(1 for item in results if 200 <= item["status"] < 300)
+        skipped_count = sum(1 for item in results if item.get("skipped"))
+        failure_count = sum(1 for item in results if not item.get("skipped") and not (200 <= item["status"] < 300))
         append_scheduled_log(f"Matched files: {len(results)}")
-        print(f"Scheduled sync finished: {ok_count}/{len(results)} files uploaded.")
-        append_scheduled_log(f"Scheduled sync finished: {ok_count}/{len(results)} files uploaded.")
+        print(
+            f"Scheduled sync finished: uploaded {ok_count}, skipped {skipped_count} unchanged, "
+            f"matched {len(results)} files."
+        )
+        append_scheduled_log(
+            f"Scheduled sync finished: uploaded {ok_count}, skipped {skipped_count} unchanged, "
+            f"matched {len(results)} files."
+        )
         for item in results:
+            if item.get("skipped"):
+                append_scheduled_log(f"SKIP {item['relative_path']} ({item.get('reason', 'unchanged')})")
+                print(f"SKIP {item['relative_path']} ({item.get('reason', 'unchanged')})")
+                continue
+
             append_scheduled_log(f"{item['status']} {item['relative_path']}")
             print(f"{item['status']} {item['relative_path']}")
             if not (200 <= item["status"] < 300):
                 append_scheduled_log(f"Response: {item['payload']}")
                 print(item["payload"], file=sys.stderr)
-        return 0 if ok_count == len(results) else 2
+        return 0 if failure_count == 0 else 2
     except SystemExit as error:
         append_scheduled_log(f"Scheduled sync failed: {error}")
         print(f"Scheduled sync failed: {error}", file=sys.stderr)

@@ -3,6 +3,13 @@ data/users.json
 data/synchro.sqlite
 data/synchro.sqlite-shm
 data/synchro.sqlite-wal
+.env
 storage/
 companion/.env
 companion/test.txt
+companion_commander/commander.env
+companion_commander/commander-test.txt
+companion_commander/commander-scheduled-sync.log
+companion_commander/commander-sync-hashes.json
+companion_commander/dist_rebuild/
+companion_commander/build_rebuild/

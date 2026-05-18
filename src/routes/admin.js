@@ -1,10 +1,15 @@
 "use strict";
 
+const path = require("path");
+
+const { STORAGE_DIR } = require("../config");
+
 // These are the two HTTP utilities this file needs:
 //   readJsonBody — reads the request body and parses it as JSON
 //   sendJson     — writes a JSON HTTP response with the right Content-Type header
 const { readJsonBody, sendJson } = require("../utils/http");
-const { parseReportFile } = require("../services/report-parser");
+const { listGilbarcoReportMonths, parseMonthlyGilbarcoReport, parseManualGilbarcoReport, listPdfFilesInEndpoint, parseReportFile, buildReportTree, parseCurrentMonthReport } = require("../services/report-parser");
+const { sendReportDigestTest, sendParsedCsvEmail } = require("../services/report-email-digest");
 
 // This function handles all /api/admin/** routes.
 // Every route here requires a valid session cookie AND the appropriate permission.
@@ -33,7 +38,10 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     sessionManager.assertPermission(session.user, "manage_keys");
     const body = await readJsonBody(req);
     // body.name is optional — if missing or empty, storage will generate a default name.
-    const created = await storage.createKeyRecord(body && body.name ? String(body.name) : "");
+    const created = await storage.createKeyRecord(
+      body && body.name ? String(body.name) : "",
+      body && body.paymentSystem ? String(body.paymentSystem) : ""
+    );
     // 201 Created is the correct status code when a new resource has been created.
     sendJson(res, 201, created);
     return true;
@@ -80,6 +88,32 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     sessionManager.assertPermission(session.user, "manage_keys");
     const rotated = await storage.rotateKeyRecord(rotateMatch[1]);
     sendJson(res, 200, rotated);
+    return true;
+  }
+
+  const paymentSystemMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/payment-system$/);
+  if (req.method === "PATCH" && paymentSystemMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_keys");
+    const body = await readJsonBody(req);
+    const updated = await storage.updateKeyPaymentSystem(
+      paymentSystemMatch[1],
+      body && body.paymentSystem ? String(body.paymentSystem) : ""
+    );
+    sendJson(res, 200, updated);
+    return true;
+  }
+
+  const agentConfigMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/agent-config$/);
+  if (req.method === "PATCH" && agentConfigMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_keys");
+    const body = await readJsonBody(req);
+    const updated = await storage.updateKeyAgentConfig(agentConfigMatch[1], {
+      verifoneUsername: body && typeof body.verifoneUsername === "string" ? body.verifoneUsername : "",
+      verifonePassword: body && typeof body.verifonePassword === "string" ? body.verifonePassword : ""
+    });
+    sendJson(res, 200, updated);
     return true;
   }
 
@@ -153,7 +187,7 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
 
     let fileInfo;
     try {
-      fileInfo = await uploadService.resolveStoredFile(
+      fileInfo = await uploadService.resolveStoredEntry(
         reportMatch[1],
         requestUrl.searchParams.get("path") || "",
         storage
@@ -168,12 +202,253 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
       return true;
     }
 
-    if (!/\.(html?|pdf)$/i.test(fileInfo.filename)) {
-      sendJson(res, 400, { error: "Only .html, .htm, and .pdf reports can be parsed." });
+    const isParsableDirectory = fileInfo.kind === "directory";
+    const isParsableFile = fileInfo.kind === "file" && /\.(html?|pdf)$/i.test(fileInfo.filename);
+    if (!isParsableDirectory && !isParsableFile) {
+      sendJson(res, 400, { error: "Only .html, .htm, .pdf, and Verifone report folders can be parsed." });
       return true;
     }
 
-    sendJson(res, 200, parseReportFile(fileInfo.fullPath));
+    try {
+      sendJson(res, 200, parseReportFile(fileInfo.fullPath));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not parse report." });
+    }
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // GET /api/admin/keys/:slug/report-tree — Year > Month > Reports listing
+  // Used by the admin Report Explorer UI to group uploaded reports by month.
+  // -----------------------------------------------------------------------
+  const reportTreeMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/report-tree$/);
+  if (req.method === "GET" && reportTreeMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, reportTreeMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(reportTreeMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    try {
+      sendJson(res, 200, buildReportTree(
+        path.join(STORAGE_DIR, reportTreeMatch[1]),
+        keyRecord.paymentSystem,
+        { slug: reportTreeMatch[1] }
+      ));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not build report tree." });
+    }
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
+  // GET /api/admin/keys/:slug/current-month-report — combined current-month
+  // report. Gilbarco aggregates PDFs uploaded this month, Verifone aggregates
+  // this month's DR-*.html dailies (excluding the MR end-of-month file).
+  // -----------------------------------------------------------------------
+  const currentMonthMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/current-month-report$/);
+  if (req.method === "GET" && currentMonthMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, currentMonthMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(currentMonthMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    const requestedMonth = requestUrl.searchParams.get("month") || "";
+    const now = new Date();
+    const currentMonth = requestedMonth
+      || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    try {
+      sendJson(res, 200, parseCurrentMonthReport(
+        path.join(STORAGE_DIR, currentMonthMatch[1]),
+        keyRecord.paymentSystem,
+        currentMonth
+      ));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not build current month report." });
+    }
+    return true;
+  }
+
+  const monthlyReportMonthsMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/monthly-report-months$/);
+  if (req.method === "GET" && monthlyReportMonthsMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, monthlyReportMonthsMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(monthlyReportMonthsMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    if (keyRecord.paymentSystem === "verifone_commander") {
+      sendJson(res, 200, {
+        slug: monthlyReportMonthsMatch[1],
+        paymentSystem: keyRecord.paymentSystem,
+        months: [],
+        manual: true,
+        message: "Verifone Commander monthly reports are prepared manually in the Report Manager software."
+      });
+      return true;
+    }
+
+    sendJson(res, 200, {
+      slug: monthlyReportMonthsMatch[1],
+      paymentSystem: keyRecord.paymentSystem,
+      months: listGilbarcoReportMonths(path.join(STORAGE_DIR, monthlyReportMonthsMatch[1]))
+    });
+    return true;
+  }
+
+  const monthlyReportMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/monthly-report$/);
+  if (req.method === "GET" && monthlyReportMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, monthlyReportMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(monthlyReportMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    if (keyRecord.paymentSystem === "verifone_commander") {
+      sendJson(res, 400, {
+        error: "Verifone Commander monthly reports are created manually in Report Manager."
+      });
+      return true;
+    }
+
+    try {
+      sendJson(res, 200, parseMonthlyGilbarcoReport(
+        path.join(STORAGE_DIR, monthlyReportMatch[1]),
+        requestUrl.searchParams.get("month") || ""
+      ));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not build monthly report." });
+    }
+    return true;
+  }
+
+  const manualReportPdfsMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/manual-report-pdfs$/);
+  if (req.method === "GET" && manualReportPdfsMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, manualReportPdfsMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(manualReportPdfsMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    if (keyRecord.paymentSystem !== "gilbarco_passport") {
+      sendJson(res, 400, { error: "Manual report selection is only available for Gilbarco Passport endpoints." });
+      return true;
+    }
+
+    try {
+      const pdfFiles = listPdfFilesInEndpoint(path.join(STORAGE_DIR, manualReportPdfsMatch[1]));
+      sendJson(res, 200, {
+        slug: manualReportPdfsMatch[1],
+        pdfFiles,
+        count: pdfFiles.length
+      });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not list PDF files." });
+    }
+    return true;
+  }
+
+  const manualReportMatch = pathname.match(/^\/api\/admin\/keys\/([^/]+)\/manual-report$/);
+  if (req.method === "POST" && manualReportMatch) {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertEndpointAccess(session.user, manualReportMatch[1]);
+
+    const keyRecord = await storage.findKeyBySlug(manualReportMatch[1]);
+    if (!keyRecord) {
+      sendJson(res, 404, { error: "Endpoint key not found." });
+      return true;
+    }
+
+    if (keyRecord.paymentSystem !== "gilbarco_passport") {
+      sendJson(res, 400, { error: "Manual report selection is only available for Gilbarco Passport endpoints." });
+      return true;
+    }
+
+    const body = await readJsonBody(req);
+    const selectedFiles = Array.isArray(body && body.pdfFiles) ? body.pdfFiles : [];
+
+    if (!selectedFiles.length) {
+      sendJson(res, 400, { error: "At least one PDF file must be selected." });
+      return true;
+    }
+
+    try {
+      sendJson(res, 200, parseManualGilbarcoReport(
+        path.join(STORAGE_DIR, manualReportMatch[1]),
+        selectedFiles
+      ));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "Could not build manual report." });
+    }
+    return true;
+  }
+
+  if (req.method === "GET" && pathname === "/api/admin/settings") {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_users");
+    sendJson(res, 200, await storage.getAppSettings());
+    return true;
+  }
+
+  if (req.method === "PUT" && pathname === "/api/admin/settings") {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_users");
+    const body = await readJsonBody(req);
+    const updated = await storage.updateAppSettings({
+      reportDigestEnabled: Boolean(body && body.reportDigestEnabled),
+      reportDigestTime: body && body.reportDigestTime ? String(body.reportDigestTime) : "",
+      reportDigestRecipients: body && body.reportDigestRecipients ? String(body.reportDigestRecipients) : ""
+    });
+    sendJson(res, 200, updated);
+    return true;
+  }
+
+  if (req.method === "POST" && pathname === "/api/admin/settings/test-digest") {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_users");
+    const result = await sendReportDigestTest(storage);
+    sendJson(res, 200, {
+      ok: true,
+      recipients: result.recipients,
+      since: result.since,
+      until: result.until,
+      reportCount: result.reportCount
+    });
+    return true;
+  }
+
+  if (req.method === "POST" && pathname === "/api/admin/report-email-csv") {
+    await sessionManager.requireSession(req);
+    const body = await readJsonBody(req);
+    const result = await sendParsedCsvEmail(storage, {
+      filename: body && body.filename ? String(body.filename) : "",
+      subject: body && body.subject ? String(body.subject) : "",
+      csvContent: body && body.csvContent ? String(body.csvContent) : "",
+      recipient: body && body.recipient ? String(body.recipient) : ""
+    });
+    sendJson(res, 200, {
+      ok: true,
+      recipients: result.recipients,
+      filename: result.filename,
+      bytes: result.bytes
+    });
     return true;
   }
 

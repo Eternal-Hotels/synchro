@@ -18,6 +18,12 @@ async function tryHandleUploadRoute(req, res, pathname, storage, uploadService) 
     return true;
   }
 
+  const configMatch = pathname.match(/^\/api\/upload\/([^/]+)\/config$/);
+  if (req.method === "GET" && configMatch) {
+    await uploadService.handleCompanionConfig(req, res, configMatch[1], storage);
+    return true;
+  }
+
   // Not an upload request — return false so the next handler can try.
   return false;
 }
