@@ -404,7 +404,10 @@ All configuration is centralized in `src/config.js`. Every value can be overridd
 | `SYNCHRO_BOOTSTRAP_USER` | `admin` | Username for the auto-created first admin |
 | `SYNCHRO_BOOTSTRAP_PASSWORD` | _(random)_ | Password for the auto-created first admin |
 
-Python companion variables (stored in `companion/.env`):
+Python companion variables:
+
+- `SynchroCompanion` stores these values in `companion/.env`.
+- `SynchroCommander` stores the same `SYNCHRO_*` keys in `companion_commander/commander.env`.
 
 | Variable | Effect |
 |---|---|

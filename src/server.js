@@ -2,6 +2,8 @@
 // Every .js file in this project starts with this line.
 "use strict";
 
+require("dotenv").config();
+
 // Node.js built-in module for creating HTTP servers.
 // "http" is part of Node's standard library — no npm install needed.
 const http = require("http");
@@ -35,6 +37,7 @@ const { createSessionManager } = require("./services/session-manager");
 
 // Handles the business logic of receiving, parsing, saving, and streaming files.
 const uploadService = require("./services/upload-service");
+const { startReportEmailDigestScheduler } = require("./services/report-email-digest");
 
 // adminUi reads the HTML/CSS/JS files from src/ui/ and returns them as strings
 // so the HTTP server can send them to the browser.
@@ -124,6 +127,9 @@ storage.initializeStorage()
   // After the database is ready, ensure at least one admin user exists.
   // On a brand-new installation this creates the bootstrap admin and prints credentials.
   .then(() => storage.ensureBootstrapAdmin())
+  .then(() => {
+    startReportEmailDigestScheduler(storage);
+  })
   // Now that storage is fully ready, start listening for HTTP connections.
   .then(() => {
     // server.listen() tells Node to begin accepting TCP connections on PORT (default 3000).
