@@ -4,10 +4,11 @@ import http.client
 import json
 import mimetypes
 import pathlib
-import subprocess
 import sys
 import uuid
 from urllib.parse import urlparse
+
+from verifone_direct import VerifoneCommanderSession, VerifoneDirectError
 
 
 # This module contains the shared "business logic" for the Python tools.
@@ -19,6 +20,9 @@ DEFAULT_VERIFONE_RNR_EXE = r"C:\Reports\RNR\RNR.exe"
 DEFAULT_VERIFONE_RNR_IP = "192.168.31.11"
 DEFAULT_VERIFONE_RNR_REPORT = "daily"
 DEFAULT_VERIFONE_EXPORT_DIR = r"C:\Reports\DR"
+DEFAULT_VERIFONE_ASSETS_DIR = str(
+    (SOURCE_DIR.parent.parent / "RNRipper" / "ReportNavigator" / "bin" / "Debug").resolve()
+)
 DEFAULT_MONTHLY_EXE = r"C:\Reports\RNR\ReportNavigator.exe"
 DEFAULT_MONTHLY_IP = DEFAULT_VERIFONE_RNR_IP
 DEFAULT_MONTHLY_REPORT = "Monthly Report"
@@ -465,45 +469,64 @@ def monthly_export_path(export_dir, now=None):
     return pathlib.Path(export_dir) / f"MR-{current.strftime('%Y%m%d')}.html"
 
 
+def resolve_verifone_assets_dir():
+    env = load_env()
+    configured = str(env.get("SYNCHRO_VERIFONE_ASSETS_DIR") or "").strip()
+    candidates = []
+    if configured:
+        candidates.append(pathlib.Path(configured).expanduser())
+    bundle_root = getattr(sys, "_MEIPASS", "")
+    if bundle_root:
+        candidates.append(pathlib.Path(bundle_root) / "verifone-assets")
+    candidates.append(runtime_dir() / "verifone-assets")
+    candidates.append(pathlib.Path(DEFAULT_VERIFONE_ASSETS_DIR))
+
+    for candidate in candidates:
+        if candidate.exists() and (candidate / "vfit").exists():
+            return candidate.resolve()
+        if candidate.exists() and candidate.name.casefold() == "vfit":
+            return candidate.resolve()
+
+    return candidates[0].resolve() if candidates else pathlib.Path(DEFAULT_VERIFONE_ASSETS_DIR)
+
+
+def normalize_verifone_report_name(report_name, default_name):
+    normalized = str(report_name or "").strip().casefold()
+    aliases = {
+        "": default_name,
+        "daily": "Daily Sales",
+        "daily sales": "Daily Sales",
+        "monthly": "Monthly Report",
+        "monthly report": "Monthly Report"
+    }
+    return aliases.get(normalized, str(report_name or default_name).strip())
+
+
 def run_report_export_command(
-    exe_path,
+    session,
     report_name,
-    ip_address,
-    username,
-    password,
     export_path,
     status_callback=None,
-    label="Report"
+    label="Report",
+    prefer_previous=False,
+    period_name=None
 ):
     export_path = pathlib.Path(export_path)
-    if not exe_path.exists():
-        raise SystemExit(f"{label} runner not found: {exe_path}")
 
     export_path.parent.mkdir(parents=True, exist_ok=True)
     had_existing_file = export_path.exists()
     previous_mtime = export_path.stat().st_mtime if had_existing_file else None
 
     if status_callback:
-        status_callback(f"Running {label} export: {exe_path.name}")
+        status_callback(f"Fetching {label} directly from the site controller...")
 
-    command = [
-        str(exe_path),
-        f"/report:{report_name}",
-        f"/ip:{ip_address}",
-        f"/user:{username}",
-        f"/password:{password}",
-        f"/export:{export_path}"
-    ]
-
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        cwd=str(exe_path.parent)
+    session.export_report(
+        report_name,
+        export_path,
+        prefer_previous=prefer_previous,
+        period_name=period_name,
+        status_callback=status_callback
     )
-    if result.returncode != 0:
-        details = (result.stderr or result.stdout or f"{exe_path.name} returned a non-zero exit code.").strip()
-        raise SystemExit(f"{label} export failed: {details}")
 
     if not export_path.exists():
         raise SystemExit(f"{label} export did not produce {export_path}")
@@ -541,22 +564,37 @@ def run_verifone_commander_export(
         raise SystemExit("Missing Verifone Commander username. Fetch endpoint config or save it in SynchroCommander first.")
     if not password:
         raise SystemExit("Missing Verifone Commander password. Fetch endpoint config or save it in SynchroCommander first.")
-    rnr_exe = pathlib.Path(rnr_exe_path or DEFAULT_VERIFONE_RNR_EXE)
     export_root = pathlib.Path(export_dir or DEFAULT_VERIFONE_EXPORT_DIR)
     command_ip = rnr_ip or DEFAULT_VERIFONE_RNR_IP
-    command_report = rnr_report or DEFAULT_VERIFONE_RNR_REPORT
-    export_path = verifone_export_path(export_root)
-
-    daily_export = run_report_export_command(
-        exe_path=rnr_exe,
-        report_name=command_report,
-        ip_address=command_ip,
-        username=username,
-        password=password,
-        export_path=export_path,
-        status_callback=status_callback,
-        label="Verifone daily"
+    command_report = normalize_verifone_report_name(
+        rnr_report or DEFAULT_VERIFONE_RNR_REPORT,
+        default_name="Daily Sales"
     )
+    export_path = verifone_export_path(export_root)
+    assets_dir = resolve_verifone_assets_dir()
+    cache_dir = runtime_dir() / "verifone-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        session = VerifoneCommanderSession(
+            host=command_ip,
+            username=username,
+            password=password,
+            assets_base_dir=assets_dir,
+            cache_dir=cache_dir
+        )
+        session.login(status_callback=status_callback)
+
+        daily_export = run_report_export_command(
+            session=session,
+            report_name=command_report,
+            export_path=export_path,
+            status_callback=status_callback,
+            label="Verifone daily",
+            prefer_previous=True
+        )
+    except VerifoneDirectError as exc:
+        raise SystemExit(f"Verifone daily export failed: {exc}") from exc
 
     now = datetime.now()
     if now.day == 1:
@@ -587,18 +625,33 @@ def run_monthly_verifone_export(
     label="Verifone monthly"
 ):
     current = now or datetime.now()
-    monthly_exe = pathlib.Path(monthly_exe_path or DEFAULT_MONTHLY_EXE)
     export_path = monthly_export_path(monthly_export_dir or DEFAULT_MONTHLY_EXPORT_DIR, now=current)
-    return run_report_export_command(
-        exe_path=monthly_exe,
-        report_name=monthly_report or DEFAULT_MONTHLY_REPORT,
-        ip_address=monthly_ip or DEFAULT_MONTHLY_IP,
-        username=monthly_user or DEFAULT_MONTHLY_USER,
-        password=monthly_password or DEFAULT_MONTHLY_PASSWORD,
-        export_path=export_path,
-        status_callback=status_callback,
-        label=label
-    )
+    assets_dir = resolve_verifone_assets_dir()
+    cache_dir = runtime_dir() / "verifone-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        session = VerifoneCommanderSession(
+            host=monthly_ip or DEFAULT_MONTHLY_IP,
+            username=monthly_user or DEFAULT_MONTHLY_USER,
+            password=monthly_password or DEFAULT_MONTHLY_PASSWORD,
+            assets_base_dir=assets_dir,
+            cache_dir=cache_dir
+        )
+        session.login(status_callback=status_callback)
+        return run_report_export_command(
+            session=session,
+            report_name=normalize_verifone_report_name(
+                monthly_report or DEFAULT_MONTHLY_REPORT,
+                default_name="Monthly Report"
+            ),
+            export_path=export_path,
+            status_callback=status_callback,
+            label=label,
+            prefer_previous=True
+        )
+    except VerifoneDirectError as exc:
+        raise SystemExit(f"{label} export failed: {exc}") from exc
 
 
 def sync_folder(

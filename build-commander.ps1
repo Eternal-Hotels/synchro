@@ -14,6 +14,8 @@ $workPath = Join-Path $companionDir "build_rebuild"
 $finalDistPath = Join-Path $companionDir "dist"
 $releasePath = Join-Path $companionDir "release"
 $releaseEnvFixPath = Join-Path $companionDir "release_envfix"
+$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
+$pythonExe = if (Test-Path $venvPython) { $venvPython } else { "python" }
 
 if (-not (Test-Path $specPath)) {
     throw "Could not find companion_commander\SynchroCommander.spec"
@@ -32,7 +34,7 @@ if (Test-Path $workPath) {
 
 Push-Location $companionDir
 try {
-    python -m PyInstaller "SynchroCommander.spec" --noconfirm --distpath "dist_rebuild" --workpath "build_rebuild"
+    & $pythonExe -m PyInstaller "SynchroCommander.spec" --noconfirm --distpath "dist_rebuild" --workpath "build_rebuild"
     if ($LASTEXITCODE -ne 0) {
         throw "PyInstaller failed with exit code $LASTEXITCODE"
     }

@@ -1,12 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_submodules
+
+
+spec_dir = Path(SPECPATH).resolve()
+scripts_root = spec_dir.parent.parent
+verifone_assets_root = scripts_root / 'RNRipper' / 'ReportNavigator' / 'bin' / 'Debug' / 'vfit'
+
+datas = []
+if verifone_assets_root.exists():
+    datas.append((str(verifone_assets_root), 'verifone-assets/vfit'))
+
 
 a = Analysis(
     ['gui.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=datas,
+    hiddenimports=collect_submodules('lxml'),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
