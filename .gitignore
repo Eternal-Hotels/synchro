@@ -5,6 +5,7 @@ data/synchro.sqlite-shm
 data/synchro.sqlite-wal
 .env
 storage/
+node_modules/
 companion/.env
 companion/test.txt
 companion_commander/commander.env
