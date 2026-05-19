@@ -105,5 +105,3 @@ sqlite3 /opt/synchro/data/synchro.sqlite ".tables"
 4. Confirm the bootstrap login works through nginx.
 5. Add HTTPS with Certbot.
 6. Rotate the bootstrap password after first login if you set a temporary one.
-
-yeehaw

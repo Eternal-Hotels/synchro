@@ -15,8 +15,6 @@ EnvironmentFile=__APP_DIR__/.env
 ExecStart=/usr/bin/node src/server.js
 Restart=always
 RestartSec=5
-StandardOutput=append:__APP_DIR__/logs/server.stdout.log
-StandardError=append:__APP_DIR__/logs/server.stderr.log
 
 # Tighten permissions a bit without blocking the app's SQLite/storage writes.
 NoNewPrivileges=true
