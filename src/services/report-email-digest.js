@@ -8,6 +8,8 @@ const { parseMonthlyGilbarcoReport, parseReportFile } = require("./report-parser
 const O365_SENDER = "auditor@eternalhotels.com";
 const DEFAULT_DIGEST_TIME = "07:00";
 const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
+const DEFAULT_GRAPH_REQUEST_TIMEOUT_MS = 15000;
+const GRAPH_REQUEST_TIMEOUT_MS = resolveGraphRequestTimeoutMs(process.env.SYNCHRO_GRAPH_REQUEST_TIMEOUT_MS);
 
 function startReportEmailDigestScheduler(storage, logger = console) {
   let timer = null;
@@ -371,6 +373,44 @@ function safeAttachmentBase(value) {
     .replace(/^_+|_+$/g, "") || "gilbarco";
 }
 
+function resolveGraphRequestTimeoutMs(rawValue) {
+  const parsed = Number.parseInt(String(rawValue || "").trim(), 10);
+  if (Number.isFinite(parsed) && parsed >= 1000) {
+    return parsed;
+  }
+  return DEFAULT_GRAPH_REQUEST_TIMEOUT_MS;
+}
+
+function createStatusError(statusCode, message, cause) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  if (cause) {
+    error.cause = cause;
+  }
+  return error;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = GRAPH_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw createStatusError(504, `Graph request timed out after ${timeoutMs} ms.`, error);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function sendDigestEmail(recipients, uploads, sinceIso, untilIso, options = {}) {
   const isTest = Boolean(options && options.isTest);
   const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024; // 3 MB raw (base64 inflates ~33%, stays under Graph 4 MB limit)
@@ -556,7 +596,7 @@ async function getGraphAccessToken() {
   form.set("scope", GRAPH_SCOPE);
   form.set("grant_type", "client_credentials");
 
-  const tokenResponse = await fetch(
+  const tokenResponse = await fetchWithTimeout(
     `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0/token`,
     {
       method: "POST",
@@ -579,7 +619,7 @@ async function getGraphAccessToken() {
 }
 
 async function graphPostJson(url, accessToken, body) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
