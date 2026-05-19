@@ -125,6 +125,8 @@ SynchroCommander is the parallel Verifone test companion. It lives under `compan
 
 Seed its config by copying `companion_commander/.env.example` to `companion_commander/commander.env`, or by running the commander entrypoints and saving settings there.
 
+The direct Verifone path no longer shells out to `RNR.exe` or `ReportNavigator.exe`. It logs into the site controller over HTTPS, retrieves the report XML directly, and applies the bundled Verifone XSLT assets in-process. If you need to override the asset location while running from source, set `SYNCHRO_VERIFONE_ASSETS_DIR` to a folder that contains the `vfit/` tree from ReportNavigator.
+
 To use the desktop GUI:
 
 ```powershell
@@ -196,6 +198,8 @@ That script rebuilds the exe from `companion_commander/SynchroCommander.spec` an
 - `companion_commander/dist/SynchroCommander.exe`
 - `companion_commander/release/SynchroCommander.exe`
 - `companion_commander/release_envfix/SynchroCommander.exe`
+
+The commander spec bundles the Verifone `vfit` transform assets into the executable. The build script also prefers `synchro/.venv/Scripts/python.exe` so PyInstaller and `lxml` come from the same environment used for development.
 
 If you want to inspect PyInstaller's temporary `dist_rebuild` and `build_rebuild` folders after a build:
 
