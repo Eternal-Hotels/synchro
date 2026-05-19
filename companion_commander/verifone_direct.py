@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 import http.client
 import pathlib
 import ssl
@@ -129,16 +130,16 @@ def _extract_fault_message(root):
     return "The site controller returned a fault response."
 
 
-def _normalize_report_lookup(name):
+def _report_lookup_aliases(name):
     normalized = str(name or "").strip().casefold()
     aliases = {
-        "": "",
-        "daily": "daily sales",
-        "daily sales": "daily sales",
-        "monthly": "monthly report",
-        "monthly report": "monthly report"
+        "": [],
+        "daily": ["daily sales"],
+        "daily sales": ["daily"],
+        "monthly": ["monthly report"],
+        "monthly report": ["monthly"]
     }
-    return aliases.get(normalized, normalized)
+    return aliases.get(normalized, [])
 
 
 class VerifoneCommanderSession:
@@ -198,7 +199,15 @@ class VerifoneCommanderSession:
         if status_callback:
             status_callback("Verifone direct session established.")
 
-    def export_report(self, report_name, export_path, prefer_previous=False, period_name=None, status_callback=None):
+    def export_report(
+        self,
+        report_name,
+        export_path,
+        prefer_previous=False,
+        period_name=None,
+        status_callback=None,
+        title_override=""
+    ):
         report_definition = self._resolve_report_definition(report_name)
         period = self._select_period(report_definition, prefer_previous, period_name)
 
@@ -217,9 +226,21 @@ class VerifoneCommanderSession:
 
         output_bytes = self._render_report(root, report_definition)
         export_target = pathlib.Path(export_path)
+        output_bytes = self._apply_title_wrapper(output_bytes, export_target, title_override)
         export_target.parent.mkdir(parents=True, exist_ok=True)
         export_target.write_bytes(output_bytes)
         return export_target
+
+    def _apply_title_wrapper(self, output_bytes, export_target, title_override):
+        if export_target.suffix.lower() not in {".html", ".htm"}:
+            return output_bytes
+
+        title_text = str(title_override or "").strip()
+        if not title_text:
+            return output_bytes
+
+        wrapper = f"<html><title>{escape(title_text, quote=False)}</title></html>"
+        return wrapper.encode("utf-8") + output_bytes
 
     def _request(self, query_pairs, label):
         pairs = list(query_pairs)
@@ -310,17 +331,20 @@ class VerifoneCommanderSession:
 
     def _resolve_report_definition(self, report_name):
         catalog = self._report_catalog_entries()
-        wanted = _normalize_report_lookup(report_name)
-        if wanted and wanted in catalog:
-            return catalog[wanted]
-
         raw_wanted = str(report_name or "").strip().casefold()
-        if raw_wanted in catalog:
-            return catalog[raw_wanted]
+        if raw_wanted:
+            for report_definition in catalog.values():
+                if report_definition.group_name.strip().casefold() == raw_wanted:
+                    return report_definition
+            if raw_wanted in catalog:
+                return catalog[raw_wanted]
 
-        for report_definition in catalog.values():
-            if report_definition.group_name.strip().casefold() == wanted:
-                return report_definition
+        for alias in _report_lookup_aliases(report_name):
+            for report_definition in catalog.values():
+                if report_definition.group_name.strip().casefold() == alias:
+                    return report_definition
+            if alias in catalog:
+                return catalog[alias]
 
         available = ", ".join(sorted(report.display_name for report in catalog.values())[:10])
         raise VerifoneDirectError(

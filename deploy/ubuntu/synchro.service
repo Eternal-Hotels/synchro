@@ -1,0 +1,28 @@
+[Unit]
+Description=Synchro upload service
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_GROUP__
+WorkingDirectory=__APP_DIR__
+Environment=NODE_ENV=production
+Environment=HOST=__APP_HOST__
+Environment=PORT=__APP_PORT__
+Environment=SYNCHRO_PYTHON_BIN=__APP_DIR__/.venv/bin/python
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+StandardOutput=append:__APP_DIR__/logs/server.stdout.log
+StandardError=append:__APP_DIR__/logs/server.stderr.log
+
+# Tighten permissions a bit without blocking the app's SQLite/storage writes.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=__APP_DIR__/data __APP_DIR__/storage __APP_DIR__/logs
+
+[Install]
+WantedBy=multi-user.target
