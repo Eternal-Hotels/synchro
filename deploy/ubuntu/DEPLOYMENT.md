@@ -29,8 +29,31 @@ The server deploys cleanly on a standard Ubuntu host as:
 
 ## First-time install
 
-1. Copy this repo onto the Ubuntu server or make it available there.
-2. Run:
+Fast path: one command from a fresh Ubuntu box:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Eternal-Hotels/synchro/main/deploy/ubuntu/install-server.sh | sudo bash
+```
+
+That clones `https://github.com/Eternal-Hotels/synchro.git` into `/opt/synchro` as the `synchro` user and configures nginx for `reports.gascofuel.com` by default.
+
+You can also install in either of these ways.
+
+1. Direct git clone into `/opt/synchro` as the `synchro` user:
+
+```bash
+sudo APP_DIR=/opt/synchro \
+  APP_USER=synchro \
+  bash deploy/ubuntu/install-server.sh
+```
+
+Optional:
+
+- Set `APP_GIT_REF=branch-name`, `tag-name`, or a commit to install a specific revision.
+- Set `APP_GIT_URL=` to a different repo if you ever need to override the default GitHub source.
+- Set `DOMAIN_NAME=` only if you ever need to override `reports.gascofuel.com`.
+
+2. Run from an existing checked-out repo on the server:
 
 ```bash
 cd /path/to/checked-out/synchro
@@ -40,7 +63,7 @@ sudo APP_DIR=/opt/synchro \
   bash deploy/ubuntu/install-server.sh
 ```
 
-If you run the script from somewhere else, set `APP_REPO_SOURCE` explicitly to the repo root.
+If `APP_REPO_SOURCE` points at a git checkout, the installer clones that repo into `/opt/synchro` as `synchro` and then `chown`s the whole app directory. If the source folder is not a git repo, the installer falls back to the old file-sync behavior.
 
 3. Edit `/opt/synchro/.env`.
 4. Start the app:
@@ -69,7 +92,16 @@ sudo certbot --nginx -d example.com
 
 ## Updating the app
 
-After you pull or copy new code onto the server:
+If `/opt/synchro` is a git checkout, update it directly in place:
+
+```bash
+sudo -u synchro git -C /opt/synchro pull --ff-only
+sudo -u synchro npm --prefix /opt/synchro ci --omit=dev
+sudo -u synchro /opt/synchro/.venv/bin/pip install -r /opt/synchro/requirements-server.txt
+sudo systemctl restart synchro
+```
+
+If you installed from a non-git source and still want the older copy-based flow, pull or copy new code onto the server and run:
 
 ```bash
 cd /path/to/checked-out/synchro
