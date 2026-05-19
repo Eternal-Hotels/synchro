@@ -138,14 +138,85 @@ endpointInfoModal.addEventListener("click", (event) => {
 });
 window.addEventListener("load", bootstrap);
 
+const appBasePath = window.location.pathname.endsWith("/")
+  ? window.location.pathname
+  : window.location.pathname + "/";
+const appBaseUrl = new URL(appBasePath, window.location.origin);
+
+function appUrl(path) {
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+  return new URL(normalizedPath, appBaseUrl).toString();
+}
+
+function appPath(path) {
+  const resolvedUrl = new URL(appUrl(path));
+  return resolvedUrl.pathname + resolvedUrl.search + resolvedUrl.hash;
+}
+
+function appHref(path) {
+  if (!path) {
+    return "";
+  }
+
+  if (/^[a-z][a-z\d+.-]*:/i.test(path)) {
+    return path;
+  }
+
+  return appUrl(path);
+}
+
+function describeUnexpectedResponse(bodyText, contentType) {
+  const trimmed = String(bodyText || "").trim();
+  if (!trimmed) {
+    return "empty response";
+  }
+
+  const normalizedType = String(contentType || "").toLowerCase();
+  if (normalizedType.includes("text/html") || trimmed.startsWith("<")) {
+    return "HTML response";
+  }
+
+  return normalizedType ? normalizedType + " response" : "non-JSON response";
+}
+
+async function readJsonResponse(response, requestPath) {
+  const rawText = await response.text();
+  if (!rawText) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    const contentType = response.headers.get("content-type") || "";
+    console.error("Unexpected non-JSON API response.", {
+      requestPath,
+      responseUrl: response.url,
+      status: response.status,
+      contentType,
+      bodyPreview: rawText.slice(0, 300)
+    });
+    throw new Error(
+      "Expected JSON from " + requestPath + " but received "
+      + describeUnexpectedResponse(rawText, contentType)
+      + " (HTTP " + response.status + ")."
+    );
+  }
+}
+
+async function fetchJson(path, options) {
+  const response = await fetch(appUrl(path), options);
+  const payload = await readJsonResponse(response, path);
+  return { response, payload };
+}
+
 async function bootstrap() {
   try {
-    const response = await fetch("/api/session/me");
+    const { response, payload } = await fetchJson("/api/session/me");
     if (!response.ok) {
       showLoggedOut();
       return;
     }
-    const payload = await response.json();
     state.user = payload.user;
     showLoggedIn();
     await refreshAll();
@@ -157,7 +228,7 @@ async function bootstrap() {
 async function login() {
   setAuthStatus("Signing in...");
   try {
-    const response = await fetch("/api/session/login", {
+    const { response, payload } = await fetchJson("/api/session/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -165,7 +236,6 @@ async function login() {
         password: document.getElementById("login-password").value
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Sign-in failed.");
     }
@@ -180,7 +250,7 @@ async function login() {
 }
 
 async function logout() {
-  await fetch("/api/session/logout", { method: "POST" });
+  await fetch(appUrl("/api/session/logout"), { method: "POST" });
   state.user = null;
   state.keys = [];
   state.users = [];
@@ -240,8 +310,7 @@ async function refreshAll() {
 
   setAppStatus("Refreshing data...");
   try {
-    const keysResponse = await fetch("/api/admin/keys");
-    const keyPayload = await keysResponse.json();
+    const { response: keysResponse, payload: keyPayload } = await fetchJson("/api/admin/keys");
     if (!keysResponse.ok) {
       throw new Error(keyPayload.error || "Could not load endpoints.");
     }
@@ -250,16 +319,14 @@ async function refreshAll() {
     renderScopeChecklist();
 
     if (state.user.permissions.manageUsers) {
-      const usersResponse = await fetch("/api/admin/users");
-      const userPayload = await usersResponse.json();
+      const { response: usersResponse, payload: userPayload } = await fetchJson("/api/admin/users");
       if (!usersResponse.ok) {
         throw new Error(userPayload.error || "Could not load users.");
       }
       state.users = userPayload;
       renderUsers();
 
-      const settingsResponse = await fetch("/api/admin/settings");
-      const settingsPayload = await settingsResponse.json();
+      const { response: settingsResponse, payload: settingsPayload } = await fetchJson("/api/admin/settings");
       if (!settingsResponse.ok) {
         throw new Error(settingsPayload.error || "Could not load settings.");
       }
@@ -284,7 +351,7 @@ async function refreshAll() {
 async function createKey() {
   try {
     setAppStatus("Creating endpoint key...");
-    const response = await fetch("/api/admin/keys", {
+    const { response, payload } = await fetchJson("/api/admin/keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -292,7 +359,6 @@ async function createKey() {
         paymentSystem: keyPaymentSystemInput.value
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not create key.");
     }
@@ -312,10 +378,9 @@ async function createKey() {
 async function rotateKey(slug) {
   try {
     setAppStatus("Rotating endpoint key...");
-    const response = await fetch("/api/admin/keys/" + slug + "/rotate", {
+    const { response, payload } = await fetchJson("/api/admin/keys/" + slug + "/rotate", {
       method: "POST"
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not rotate key.");
     }
@@ -336,7 +401,7 @@ async function createUser() {
     setAppStatus("Creating user...");
     const role = document.getElementById("new-role").value;
     const endpointScopes = role === "viewer" ? selectedScopes() : [];
-    const response = await fetch("/api/admin/users", {
+    const { response, payload } = await fetchJson("/api/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -346,7 +411,6 @@ async function createUser() {
         endpointScopes
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not create user.");
     }
@@ -363,8 +427,7 @@ async function createUser() {
 async function mutate(url, options, successMessage) {
   try {
     setAppStatus("Updating...");
-    const response = await fetch(url, options);
-    const payload = await response.json();
+    const { response, payload } = await fetchJson(url, options);
     if (!response.ok) {
       throw new Error(payload.error || "Request failed.");
     }
@@ -479,7 +542,7 @@ function renderEndpointInfo(key) {
   endpointInfoBody.innerHTML =
     "<section class=\"report-section endpoint-info-grid\">" +
     "<div class=\"endpoint-info-meta\">" +
-    "<div>Endpoint API: <code>/api/upload/" + escapeHtml(key.slug) + "</code></div>" +
+    "<div>Endpoint API: <code>" + escapeHtml(appPath("/api/upload/" + key.slug)) + "</code></div>" +
     "<div>Created: " + escapeHtml(key.createdAt) + "</div>" +
     lastUsedLine +
     rotatedLine +
@@ -587,8 +650,7 @@ async function loadMonthlyReportMonths(slug, name) {
   setMonthlyStatus("Loading months...");
 
   try {
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/monthly-report-months");
-    const payload = await response.json();
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/monthly-report-months");
     if (!response.ok) {
       throw new Error(payload.error || "Could not load monthly reports.");
     }
@@ -605,8 +667,7 @@ async function loadMonthlyReportMonths(slug, name) {
     
     // Also load available PDFs for manual selection
     try {
-      const pdfResponse = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/manual-report-pdfs");
-      const pdfPayload = await pdfResponse.json();
+      const { response: pdfResponse, payload: pdfPayload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/manual-report-pdfs");
       if (pdfResponse.ok && Array.isArray(pdfPayload.pdfFiles)) {
         state.monthlyViewer.pdfFiles = pdfPayload.pdfFiles;
       }
@@ -645,7 +706,7 @@ async function buildManualReport() {
 
   try {
     setMonthlyStatus("Building report from " + selectedFiles.length + " PDF(s)...");
-    const response = await fetch(
+    const { response, payload } = await fetchJson(
       "/api/admin/keys/" + encodeURIComponent(state.monthlyViewer.slug) + "/manual-report",
       {
         method: "POST",
@@ -653,7 +714,6 @@ async function buildManualReport() {
         body: JSON.stringify({ pdfFiles: selectedFiles })
       }
     );
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not build manual report.");
     }
@@ -677,12 +737,11 @@ async function buildManualReport() {
 async function updatePaymentSystem(slug, paymentSystem) {
   try {
     setAppStatus("Updating payment system...");
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/payment-system", {
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/payment-system", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentSystem })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not update payment system.");
     }
@@ -697,7 +756,7 @@ async function updatePaymentSystem(slug, paymentSystem) {
 async function updateAgentConfig(slug, verifoneUsername, verifonePassword) {
   try {
     setAppStatus("Saving Verifone Commander credentials...");
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/agent-config", {
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/agent-config", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -705,7 +764,6 @@ async function updateAgentConfig(slug, verifoneUsername, verifonePassword) {
         verifonePassword
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not save Verifone Commander credentials.");
     }
@@ -831,10 +889,9 @@ function renderMonthlyViewerManual() {
 async function loadMonthlyReport(slug, month, monthLabel) {
   try {
     setMonthlyStatus("Building " + monthLabel + " report...");
-    const response = await fetch(
+    const { response, payload } = await fetchJson(
       "/api/admin/keys/" + encodeURIComponent(slug) + "/monthly-report?month=" + encodeURIComponent(month)
     );
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not build monthly report.");
     }
@@ -871,8 +928,7 @@ async function loadReportTree(slug, name, paymentSystem) {
   explorerCrumbs.innerHTML = "";
 
   try {
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/report-tree");
-    const payload = await response.json();
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/report-tree");
     if (!response.ok) {
       throw new Error(payload.error || "Could not load report tree.");
     }
@@ -936,7 +992,7 @@ function renderReportTree() {
           ? escapeHtml(report.day || "")
           : (escapeHtml(report.sizeLabel || "") + (report.day ? " | " + escapeHtml(report.day) : ""));
         const downloadAction = report.downloadUrl
-          ? '<a href="' + report.downloadUrl + '">Download</a>'
+          ? '<a href="' + appHref(report.downloadUrl) + '">Download</a>'
           : "";
         const parseAction = report.canParseReport
           ? '<button class="secondary" data-parse-path="' + escapeHtml(report.path) + '" data-parse-name="' + escapeHtml(report.name) + '">View Parsed</button>'
@@ -1081,8 +1137,7 @@ async function loadCurrentMonthReport(slug, name, paymentSystem) {
   setReportStatus("Building current month report...");
 
   try {
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/current-month-report");
-    const payload = await response.json();
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/current-month-report");
     if (!response.ok) {
       throw new Error(payload.error || "Could not build current month report.");
     }
@@ -1117,8 +1172,7 @@ async function loadExplorerLegacy(slug, name, currentPath) {
 
   try {
     const query = currentPath ? "?path=" + encodeURIComponent(currentPath) : "";
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/browse" + query);
-    const payload = await response.json();
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/browse" + query);
     if (!response.ok) {
       throw new Error(payload.error || "Could not load folder.");
     }
@@ -1157,7 +1211,7 @@ function renderExplorer() {
     const canDeleteEntry = Boolean(state.user && state.user.permissions && state.user.permissions.manageKeys);
     const primaryAction = entry.kind === "directory"
       ? "<button class=\"secondary\" data-open-path=\"" + escapeHtml(entry.path) + "\">Open Folder</button>"
-      : "<a href=\"" + entry.downloadUrl + "\">Download</a>";
+      : "<a href=\"" + appHref(entry.downloadUrl) + "\">Download</a>";
     const parseAction = canParseReport
       ? "<button class=\"secondary\" data-parse-path=\"" + escapeHtml(entry.path) + "\" data-parse-name=\"" + escapeHtml(entry.name) + "\">View Parsed</button>"
       : "";
@@ -1210,11 +1264,10 @@ function renderExplorer() {
 async function deleteExplorerEntry(entryPath, entryKind) {
   try {
     setExplorerStatus("Deleting " + entryKind + "...");
-    const response = await fetch(
+    const { response, payload } = await fetchJson(
       "/api/admin/keys/" + encodeURIComponent(state.explorer.slug) + "/file-delete?path=" + encodeURIComponent(entryPath),
       { method: "DELETE" }
     );
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not delete entry.");
     }
@@ -1239,8 +1292,7 @@ async function loadParsedReport(slug, reportPath, reportName) {
   setReportStatus("Loading parsed report...");
 
   try {
-    const response = await fetch("/api/admin/keys/" + encodeURIComponent(slug) + "/report?path=" + encodeURIComponent(reportPath));
-    const payload = await response.json();
+    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/report?path=" + encodeURIComponent(reportPath));
     if (!response.ok) {
       throw new Error(payload.error || "Could not parse report.");
     }
@@ -1425,7 +1477,7 @@ async function emailParsedReportCsv() {
 
     const filename = buildReportDownloadName("csv");
     const csvContent = buildParsedReportCsv(state.reportViewer.report);
-    const response = await fetch("/api/admin/report-email-csv", {
+    const { response, payload } = await fetchJson("/api/admin/report-email-csv", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1435,7 +1487,6 @@ async function emailParsedReportCsv() {
         recipient
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not email CSV export.");
     }
@@ -1905,7 +1956,7 @@ function renderSettings() {
 async function saveSettings() {
   try {
     setSettingsStatus("Saving settings...");
-    const response = await fetch("/api/admin/settings", {
+    const { response, payload } = await fetchJson("/api/admin/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1914,7 +1965,6 @@ async function saveSettings() {
         reportDigestRecipients: settingRecipientEmailsInput.value
       })
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not save settings.");
     }
@@ -1936,10 +1986,9 @@ async function sendTestDigest() {
   try {
     setSettingsStatus("Sending test digest...");
     testDigestButton.disabled = true;
-    const response = await fetch("/api/admin/settings/test-digest", {
+    const { response, payload } = await fetchJson("/api/admin/settings/test-digest", {
       method: "POST"
     });
-    const payload = await response.json();
     if (!response.ok) {
       throw new Error(payload.error || "Could not send test digest.");
     }
