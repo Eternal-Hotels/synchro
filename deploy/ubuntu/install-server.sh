@@ -67,7 +67,12 @@ else
 fi
 
 echo "[6/9] Installing Node dependencies"
-su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"
+if [[ -f "${APP_DIR}/package-lock.json" ]]; then
+  su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"
+else
+  echo "package-lock.json not found in ${APP_DIR}; falling back to npm install --omit=dev"
+  su -s /bin/bash -c "cd '${APP_DIR}' && npm install --omit=dev" "${APP_USER}"
+fi
 
 echo "[7/9] Creating Python virtualenv"
 if [[ ! -d "${APP_DIR}/.venv" ]]; then

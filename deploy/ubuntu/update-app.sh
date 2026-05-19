@@ -38,7 +38,12 @@ rsync -a \
 
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
 
-su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"
+if [[ -f "${APP_DIR}/package-lock.json" ]]; then
+  su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"
+else
+  echo "package-lock.json not found in ${APP_DIR}; falling back to npm install --omit=dev"
+  su -s /bin/bash -c "cd '${APP_DIR}' && npm install --omit=dev" "${APP_USER}"
+fi
 su -s /bin/bash -c "'${APP_DIR}/.venv/bin/pip' install -r '${APP_DIR}/requirements-server.txt'" "${APP_USER}"
 
 systemctl start "${SERVICE_NAME}"
