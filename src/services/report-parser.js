@@ -25,7 +25,12 @@ function parseHtmlReportFile(filePath, options = {}) {
 
 function parsePdfReportFile(filePath) {
   const scriptPath = path.resolve(__dirname, "..", "pdf_report_parser.py");
-  const stdout = childProcess.execFileSync("python", [scriptPath, filePath], {
+  const pythonBin = String(
+    process.env.SYNCHRO_PYTHON_BIN ||
+    process.env.PYTHON_BIN ||
+    "python3"
+  ).trim() || "python3";
+  const stdout = childProcess.execFileSync(pythonBin, [scriptPath, filePath], {
     cwd: path.resolve(__dirname, "..", ".."),
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024

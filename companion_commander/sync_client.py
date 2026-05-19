@@ -490,16 +490,14 @@ def resolve_verifone_assets_dir():
     return candidates[0].resolve() if candidates else pathlib.Path(DEFAULT_VERIFONE_ASSETS_DIR)
 
 
-def normalize_verifone_report_name(report_name, default_name):
-    normalized = str(report_name or "").strip().casefold()
-    aliases = {
-        "": default_name,
-        "daily": "Daily Sales",
-        "daily sales": "Daily Sales",
-        "monthly": "Monthly Report",
-        "monthly report": "Monthly Report"
-    }
-    return aliases.get(normalized, str(report_name or default_name).strip())
+def resolve_requested_verifone_report_name(report_name, default_name):
+    value = str(report_name or "").strip()
+    return value or default_name
+
+
+def resolve_verifone_output_title(report_name, default_title):
+    value = str(report_name or "").strip()
+    return value or default_title
 
 
 def run_report_export_command(
@@ -509,7 +507,8 @@ def run_report_export_command(
     status_callback=None,
     label="Report",
     prefer_previous=False,
-    period_name=None
+    period_name=None,
+    title_override=""
 ):
     export_path = pathlib.Path(export_path)
 
@@ -525,7 +524,8 @@ def run_report_export_command(
         export_path,
         prefer_previous=prefer_previous,
         period_name=period_name,
-        status_callback=status_callback
+        status_callback=status_callback,
+        title_override=title_override
     )
 
     if not export_path.exists():
@@ -566,9 +566,9 @@ def run_verifone_commander_export(
         raise SystemExit("Missing Verifone Commander password. Fetch endpoint config or save it in SynchroCommander first.")
     export_root = pathlib.Path(export_dir or DEFAULT_VERIFONE_EXPORT_DIR)
     command_ip = rnr_ip or DEFAULT_VERIFONE_RNR_IP
-    command_report = normalize_verifone_report_name(
+    command_report = resolve_requested_verifone_report_name(
         rnr_report or DEFAULT_VERIFONE_RNR_REPORT,
-        default_name="Daily Sales"
+        default_name=DEFAULT_VERIFONE_RNR_REPORT
     )
     export_path = verifone_export_path(export_root)
     assets_dir = resolve_verifone_assets_dir()
@@ -584,6 +584,8 @@ def run_verifone_commander_export(
             cache_dir=cache_dir
         )
         session.login(status_callback=status_callback)
+        if status_callback:
+            status_callback(f'Trying configured Verifone report/group "{command_report}" from commander settings.')
 
         daily_export = run_report_export_command(
             session=session,
@@ -591,7 +593,11 @@ def run_verifone_commander_export(
             export_path=export_path,
             status_callback=status_callback,
             label="Verifone daily",
-            prefer_previous=True
+            prefer_previous=True,
+            title_override=resolve_verifone_output_title(
+                rnr_report or DEFAULT_VERIFONE_RNR_REPORT,
+                default_title="daily"
+            )
         )
     except VerifoneDirectError as exc:
         raise SystemExit(f"Verifone daily export failed: {exc}") from exc
@@ -631,6 +637,10 @@ def run_monthly_verifone_export(
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        requested_monthly_report = resolve_requested_verifone_report_name(
+            monthly_report or DEFAULT_MONTHLY_REPORT,
+            default_name=DEFAULT_MONTHLY_REPORT
+        )
         session = VerifoneCommanderSession(
             host=monthly_ip or DEFAULT_MONTHLY_IP,
             username=monthly_user or DEFAULT_MONTHLY_USER,
@@ -639,16 +649,21 @@ def run_monthly_verifone_export(
             cache_dir=cache_dir
         )
         session.login(status_callback=status_callback)
+        if status_callback:
+            status_callback(
+                f'Trying configured monthly report/group "{requested_monthly_report}" from commander settings.'
+            )
         return run_report_export_command(
             session=session,
-            report_name=normalize_verifone_report_name(
-                monthly_report or DEFAULT_MONTHLY_REPORT,
-                default_name="Monthly Report"
-            ),
+            report_name=requested_monthly_report,
             export_path=export_path,
             status_callback=status_callback,
             label=label,
-            prefer_previous=True
+            prefer_previous=True,
+            title_override=resolve_verifone_output_title(
+                monthly_report or DEFAULT_MONTHLY_REPORT,
+                default_title="Monthly Report"
+            )
         )
     except VerifoneDirectError as exc:
         raise SystemExit(f"{label} export failed: {exc}") from exc
