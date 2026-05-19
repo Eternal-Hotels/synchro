@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_REPO_SOURCE="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run this script as root: sudo bash deploy/ubuntu/install-server.sh"
   exit 1
@@ -9,7 +12,7 @@ fi
 APP_USER="${APP_USER:-synchro}"
 APP_GROUP="${APP_GROUP:-${APP_USER}}"
 APP_DIR="${APP_DIR:-/opt/synchro}"
-APP_REPO_SOURCE="${APP_REPO_SOURCE:-}"
+APP_REPO_SOURCE="${APP_REPO_SOURCE:-${DEFAULT_REPO_SOURCE}}"
 APP_PORT="${APP_PORT:-3000}"
 APP_HOST="${APP_HOST:-127.0.0.1}"
 NODE_MAJOR="${NODE_MAJOR:-20}"
@@ -18,9 +21,25 @@ DOMAIN_NAME="${DOMAIN_NAME:-_}"
 
 export DEBIAN_FRONTEND=noninteractive
 
+if [[ ! -d "${APP_REPO_SOURCE}" ]]; then
+  echo "APP_REPO_SOURCE does not exist: ${APP_REPO_SOURCE}"
+  exit 1
+fi
+
+if [[ ! -f "${APP_REPO_SOURCE}/package.json" ]]; then
+  echo "APP_REPO_SOURCE is not the Synchro repo root: ${APP_REPO_SOURCE}"
+  echo "Expected to find: ${APP_REPO_SOURCE}/package.json"
+  exit 1
+fi
+
+if [[ ! -f "${APP_REPO_SOURCE}/package-lock.json" ]]; then
+  echo "APP_REPO_SOURCE is missing package-lock.json: ${APP_REPO_SOURCE}"
+  exit 1
+fi
+
 echo "[1/9] Installing OS packages"
 apt-get update
-apt-get install -y curl ca-certificates gnupg lsb-release nginx python3 python3-venv python3-pip sqlite3
+apt-get install -y curl ca-certificates gnupg lsb-release nginx python3 python3-venv python3-pip sqlite3 rsync
 
 echo "[2/9] Installing Node.js ${NODE_MAJOR}.x"
 install -d -m 0755 /etc/apt/keyrings
@@ -48,29 +67,37 @@ install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}/data"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}/storage"
 install -d -o "${APP_USER}" -g "${APP_GROUP}" -m 0755 "${APP_DIR}/logs"
 
-if [[ -n "${APP_REPO_SOURCE}" ]]; then
-  echo "[5/9] Syncing application files from ${APP_REPO_SOURCE}"
-  rsync -a \
-    --delete \
-    --exclude ".git/" \
-    --exclude ".venv/" \
-    --exclude "node_modules/" \
-    --exclude "data/" \
-    --exclude "storage/" \
-    --exclude "companion/" \
-    --exclude "companion_commander/" \
-    --exclude "__pycache__/" \
-    "${APP_REPO_SOURCE}/" "${APP_DIR}/"
-  chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
-else
-  echo "[5/9] Skipping code sync because APP_REPO_SOURCE is not set"
+echo "[5/9] Syncing application files from ${APP_REPO_SOURCE}"
+rsync -a \
+  --delete \
+  --exclude ".git/" \
+  --exclude ".venv/" \
+  --exclude "node_modules/" \
+  --exclude "data/" \
+  --exclude "storage/" \
+  --exclude "companion/" \
+  --exclude "companion_commander/" \
+  --exclude "__pycache__/" \
+  "${APP_REPO_SOURCE}/" "${APP_DIR}/"
+chown -R "${APP_USER}:${APP_GROUP}" "${APP_DIR}"
+
+if [[ ! -f "${APP_DIR}/package.json" ]]; then
+  echo "Install failed: ${APP_DIR}/package.json was not copied."
+  echo "Source used: ${APP_REPO_SOURCE}"
+  exit 1
+fi
+
+if [[ ! -f "${APP_DIR}/package-lock.json" ]]; then
+  echo "Install failed: ${APP_DIR}/package-lock.json was not copied."
+  echo "Source used: ${APP_REPO_SOURCE}"
+  exit 1
 fi
 
 echo "[6/9] Installing Node dependencies"
-if [[ -f "${APP_DIR}/package-lock.json" ]]; then
-  su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"
+if su -s /bin/bash -c "cd '${APP_DIR}' && npm ci --omit=dev" "${APP_USER}"; then
+  :
 else
-  echo "package-lock.json not found in ${APP_DIR}; falling back to npm install --omit=dev"
+  echo "npm ci failed in ${APP_DIR}; falling back to npm install --omit=dev"
   su -s /bin/bash -c "cd '${APP_DIR}' && npm install --omit=dev" "${APP_USER}"
 fi
 

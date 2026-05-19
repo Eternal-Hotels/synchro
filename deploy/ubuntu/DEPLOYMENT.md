@@ -33,12 +33,14 @@ The server deploys cleanly on a standard Ubuntu host as:
 2. Run:
 
 ```bash
-sudo APP_REPO_SOURCE=/path/to/checked-out/synchro \
-  APP_DIR=/opt/synchro \
+cd /path/to/checked-out/synchro
+sudo APP_DIR=/opt/synchro \
   APP_USER=synchro \
   DOMAIN_NAME=example.com \
   bash deploy/ubuntu/install-server.sh
 ```
+
+If you run the script from somewhere else, set `APP_REPO_SOURCE` explicitly to the repo root.
 
 3. Edit `/opt/synchro/.env`.
 4. Start the app:
@@ -70,8 +72,8 @@ sudo certbot --nginx -d example.com
 After you pull or copy new code onto the server:
 
 ```bash
-sudo APP_REPO_SOURCE=/path/to/checked-out/synchro \
-  APP_DIR=/opt/synchro \
+cd /path/to/checked-out/synchro
+sudo APP_DIR=/opt/synchro \
   APP_USER=synchro \
   bash deploy/ubuntu/update-app.sh
 ```
