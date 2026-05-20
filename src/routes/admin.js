@@ -9,7 +9,7 @@ const { STORAGE_DIR } = require("../config");
 //   sendJson     — writes a JSON HTTP response with the right Content-Type header
 const { readJsonBody, sendJson } = require("../utils/http");
 const { listGilbarcoReportMonths, parseMonthlyGilbarcoReport, parseManualGilbarcoReport, listPdfFilesInEndpoint, parseReportFile, buildReportTree, parseCurrentMonthReport } = require("../services/report-parser");
-const { sendReportDigestTest, sendParsedCsvEmail } = require("../services/report-email-digest");
+const { sendReportDigestTest, sendMorningSyncLogTest, sendParsedCsvEmail } = require("../services/report-email-digest");
 const { getReportJob, runReportTask, startReportJob } = require("../services/report-task-service");
 
 function getReportJobOwnerKey(user) {
@@ -509,7 +509,10 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     const updated = await storage.updateAppSettings({
       reportDigestEnabled: Boolean(body && body.reportDigestEnabled),
       reportDigestTime: body && body.reportDigestTime ? String(body.reportDigestTime) : "",
-      reportDigestRecipients: body && body.reportDigestRecipients ? String(body.reportDigestRecipients) : ""
+      reportDigestRecipients: body && body.reportDigestRecipients ? String(body.reportDigestRecipients) : "",
+      morningSyncLogEnabled: Boolean(body && body.morningSyncLogEnabled),
+      morningSyncLogTime: body && body.morningSyncLogTime ? String(body.morningSyncLogTime) : "",
+      morningSyncLogRecipients: body && body.morningSyncLogRecipients ? String(body.morningSyncLogRecipients) : ""
     });
     sendJson(res, 200, updated);
     return true;
@@ -525,6 +528,22 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
       since: result.since,
       until: result.until,
       reportCount: result.reportCount
+    });
+    return true;
+  }
+
+  if (req.method === "POST" && pathname === "/api/admin/settings/test-morning-sync-log") {
+    const session = await sessionManager.requireSession(req);
+    sessionManager.assertPermission(session.user, "manage_users");
+    const result = await sendMorningSyncLogTest(storage);
+    sendJson(res, 200, {
+      ok: true,
+      recipients: result.recipients,
+      since: result.since,
+      until: result.until,
+      uploadCount: result.uploadCount,
+      endpointCount: result.endpointCount,
+      totalBytes: result.totalBytes
     });
     return true;
   }

@@ -44,6 +44,10 @@ const DEFAULT_APP_SETTINGS = {
   reportDigestTime: "07:00",
   reportDigestRecipients: "",
   reportDigestLastSentAt: "",
+  morningSyncLogEnabled: false,
+  morningSyncLogTime: "07:00",
+  morningSyncLogRecipients: "",
+  morningSyncLogLastSentAt: "",
   reportMonthEndLastSentMonth: ""
 };
 
@@ -1066,6 +1070,33 @@ async function recordUploadEvent(slug, relativePath, bytes) {
   );
 }
 
+async function listUploadEventsSince(sinceIso, untilIso) {
+  const since = String(sinceIso || "").trim();
+  const until = String(untilIso || "").trim() || new Date().toISOString();
+  if (!since) {
+    return [];
+  }
+
+  const rows = await dbAll(
+    `SELECT endpoint_slug AS endpointSlug,
+            relative_path AS relativePath,
+            bytes,
+            received_at AS receivedAt
+     FROM upload_events
+     WHERE received_at > ?
+       AND received_at <= ?
+     ORDER BY received_at ASC`,
+    [since, until]
+  );
+
+  return rows.map((row) => ({
+    endpointSlug: row.endpointSlug,
+    relativePath: row.relativePath,
+    bytes: Number(row.bytes || 0),
+    receivedAt: row.receivedAt
+  }));
+}
+
 async function listReportUploadsSince(sinceIso, untilIso) {
   const since = String(sinceIso || "").trim();
   const until = String(untilIso || "").trim() || new Date().toISOString();
@@ -1186,6 +1217,14 @@ async function getAppSettings() {
       settings.reportDigestRecipients = row.settingValue || "";
     } else if (row.settingKey === "report_digest_last_sent_at") {
       settings.reportDigestLastSentAt = row.settingValue || "";
+    } else if (row.settingKey === "morning_sync_log_enabled") {
+      settings.morningSyncLogEnabled = row.settingValue === "1";
+    } else if (row.settingKey === "morning_sync_log_time") {
+      settings.morningSyncLogTime = normalizeDigestTime(row.settingValue);
+    } else if (row.settingKey === "morning_sync_log_recipients") {
+      settings.morningSyncLogRecipients = row.settingValue || "";
+    } else if (row.settingKey === "morning_sync_log_last_sent_at") {
+      settings.morningSyncLogLastSentAt = row.settingValue || "";
     } else if (row.settingKey === "report_month_end_last_sent_month") {
       settings.reportMonthEndLastSentMonth = normalizeMonthKey(row.settingValue);
     }
@@ -1222,6 +1261,31 @@ async function updateAppSettings(payload = {}) {
     }
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, "morningSyncLogEnabled")) {
+    next.morningSyncLogEnabled = Boolean(payload.morningSyncLogEnabled);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "morningSyncLogTime")) {
+    next.morningSyncLogTime = normalizeDigestTime(payload.morningSyncLogTime);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "morningSyncLogRecipients")) {
+    next.morningSyncLogRecipients = normalizeRecipientText(payload.morningSyncLogRecipients);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "morningSyncLogLastSentAt")) {
+    const value = String(payload.morningSyncLogLastSentAt || "").trim();
+    if (value) {
+      const parsed = Date.parse(value);
+      if (Number.isNaN(parsed)) {
+        throw httpError(400, "Invalid morning sync log last-sent timestamp.");
+      }
+      next.morningSyncLogLastSentAt = new Date(parsed).toISOString();
+    } else {
+      next.morningSyncLogLastSentAt = "";
+    }
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, "reportMonthEndLastSentMonth")) {
     next.reportMonthEndLastSentMonth = normalizeMonthKey(payload.reportMonthEndLastSentMonth);
   }
@@ -1230,6 +1294,10 @@ async function updateAppSettings(payload = {}) {
   await upsertSetting("report_digest_time", next.reportDigestTime);
   await upsertSetting("report_digest_recipients", next.reportDigestRecipients);
   await upsertSetting("report_digest_last_sent_at", next.reportDigestLastSentAt);
+  await upsertSetting("morning_sync_log_enabled", next.morningSyncLogEnabled ? "1" : "0");
+  await upsertSetting("morning_sync_log_time", next.morningSyncLogTime);
+  await upsertSetting("morning_sync_log_recipients", next.morningSyncLogRecipients);
+  await upsertSetting("morning_sync_log_last_sent_at", next.morningSyncLogLastSentAt);
   await upsertSetting("report_month_end_last_sent_month", next.reportMonthEndLastSentMonth);
 
   return next;
@@ -1385,6 +1453,7 @@ module.exports = {
   findUserByUsername,
   recordKeyUsage,
   recordUploadEvent,
+  listUploadEventsSince,
   listReportUploadsSince,
   getAppSettings,
   updateAppSettings,

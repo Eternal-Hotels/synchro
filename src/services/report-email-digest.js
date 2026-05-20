@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { STORAGE_DIR } = require("../config");
+const { formatBytes } = require("../utils/http");
 const { parseMonthlyGilbarcoReport, parseReportFile } = require("./report-parser");
 
 const O365_SENDER = "auditor@eternalhotels.com";
@@ -13,80 +14,47 @@ const GRAPH_REQUEST_TIMEOUT_MS = resolveGraphRequestTimeoutMs(process.env.SYNCHR
 
 function startReportEmailDigestScheduler(storage, logger = console) {
   let timer = null;
-
-  async function runDueDigest() {
-    const now = new Date();
-    const settings = await storage.getAppSettings();
-    const digestTime = normalizeDigestTime(settings.reportDigestTime);
-    const todayWindowStart = startOfWindow(now, digestTime);
-    if (!settings.reportDigestEnabled) {
-      return;
-    }
-
-    const recipients = parseRecipients(settings.reportDigestRecipients);
-    if (!recipients.length) {
-      logger.warn("Report digest is enabled but no recipient emails are configured.");
-      return;
-    }
-
-    if (now < todayWindowStart) {
-      return;
-    }
-
-    const lastSentAt = parseIsoDate(settings.reportDigestLastSentAt);
-    if (lastSentAt && lastSentAt >= todayWindowStart) {
-      return;
-    }
-
-    const since = lastSentAt ? lastSentAt.toISOString() : previousWindowStart(now, digestTime).toISOString();
-    const until = now.toISOString();
-    const uploads = await storage.listReportUploadsSince(since, until);
-
-    if (uploads.length > 0) {
-      await sendDigestEmail(recipients, uploads, since, until);
-      logger.log(`Sent report digest with ${uploads.length} new report(s) to ${recipients.join(", ")}.`);
-    } else {
-      logger.log("No new reports found for digest window. Marking window as synced.");
-    }
-
-    await runDueGilbarcoMonthEnd({
-      storage,
-      recipients,
-      now,
-      logger
-    });
-
-    await storage.updateAppSettings({
-      reportDigestLastSentAt: until
-    });
-  }
+  let stopped = false;
 
   async function tick() {
+    if (stopped) {
+      return;
+    }
+
     try {
-      await runDueDigest();
+      const now = new Date();
+      await runDueReportDigest({ storage, now, logger });
+      await runDueMorningSyncLog({ storage, now, logger });
     } catch (error) {
       logger.error("Report digest scheduler failed.", error);
     } finally {
-      scheduleNext();
+      await scheduleNext();
     }
   }
 
   async function scheduleNext() {
+    if (stopped) {
+      return;
+    }
+
     if (timer) {
       clearTimeout(timer);
       timer = null;
     }
 
-    let digestTime = DEFAULT_DIGEST_TIME;
+    let nextRun = new Date(Date.now() + 60 * 1000);
     try {
+      const now = new Date();
       const settings = await storage.getAppSettings();
-      digestTime = normalizeDigestTime(settings.reportDigestTime);
+      nextRun = resolveNextSchedulerRun(now, [
+        normalizeDigestTime(settings.reportDigestTime),
+        normalizeDigestTime(settings.morningSyncLogTime)
+      ]);
     } catch (_error) {
-      digestTime = DEFAULT_DIGEST_TIME;
+      nextRun = new Date(Date.now() + 60 * 1000);
     }
 
-    const nextRun = nextWindowStart(new Date(), digestTime);
-    const delayMs = Math.max(1000, nextRun.getTime() - Date.now());
+    const delayMs = Math.max(1000, Math.min(60 * 1000, nextRun.getTime() - Date.now()));
     timer = setTimeout(() => {
       tick();
     }, delayMs);
@@ -96,12 +64,112 @@ function startReportEmailDigestScheduler(storage, logger = console) {
 
   return {
     stop() {
+      stopped = true;
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
     }
   };
+}
+
+async function runDueReportDigest({ storage, now = new Date(), logger = console }) {
+  const settings = await storage.getAppSettings();
+  const digestTime = normalizeDigestTime(settings.reportDigestTime);
+  const todayWindowStart = startOfWindow(now, digestTime);
+  if (!settings.reportDigestEnabled) {
+    return false;
+  }
+
+  const recipients = parseRecipients(settings.reportDigestRecipients);
+  if (!recipients.length) {
+    logger.warn("Report digest is enabled but no recipient emails are configured.");
+    return false;
+  }
+
+  if (now < todayWindowStart) {
+    return false;
+  }
+
+  const lastSentAt = parseIsoDate(settings.reportDigestLastSentAt);
+  if (lastSentAt && lastSentAt >= todayWindowStart) {
+    return false;
+  }
+
+  const since = lastSentAt ? lastSentAt.toISOString() : previousWindowStart(now, digestTime).toISOString();
+  const until = now.toISOString();
+  const uploads = await storage.listReportUploadsSince(since, until);
+
+  if (uploads.length > 0) {
+    await sendDigestEmail(recipients, uploads, since, until);
+    logger.log(`Sent report digest with ${uploads.length} new report(s) to ${recipients.join(", ")}.`);
+  } else {
+    logger.log("No new reports found for digest window. Marking window as synced.");
+  }
+
+  await runDueGilbarcoMonthEnd({
+    storage,
+    recipients,
+    now,
+    logger
+  });
+
+  await storage.updateAppSettings({
+    reportDigestLastSentAt: until
+  });
+
+  return true;
+}
+
+async function runDueMorningSyncLog({ storage, now = new Date(), logger = console }) {
+  const settings = await storage.getAppSettings();
+  const syncTime = normalizeDigestTime(settings.morningSyncLogTime);
+  const todayWindowStart = startOfWindow(now, syncTime);
+  if (!settings.morningSyncLogEnabled) {
+    return false;
+  }
+
+  const recipients = parseRecipients(settings.morningSyncLogRecipients);
+  if (!recipients.length) {
+    logger.warn("Morning sync log is enabled but no recipient emails are configured.");
+    return false;
+  }
+
+  if (now < todayWindowStart) {
+    return false;
+  }
+
+  const lastSentAt = parseIsoDate(settings.morningSyncLogLastSentAt);
+  if (lastSentAt && lastSentAt >= todayWindowStart) {
+    return false;
+  }
+
+  const since = lastSentAt ? lastSentAt.toISOString() : previousWindowStart(now, syncTime).toISOString();
+  const until = now.toISOString();
+  const uploadEvents = await storage.listUploadEventsSince(since, until);
+
+  await sendMorningSyncLogEmail(recipients, uploadEvents, since, until);
+  logger.log(`Sent morning sync log with ${uploadEvents.length} upload event(s) to ${recipients.join(", ")}.`);
+
+  await storage.updateAppSettings({
+    morningSyncLogLastSentAt: until
+  });
+
+  return true;
+}
+
+function resolveNextSchedulerRun(now, scheduledTimes = []) {
+  const candidates = scheduledTimes
+    .map((scheduledTime) => nextWindowStart(now, scheduledTime))
+    .filter((candidate) => candidate instanceof Date && Number.isFinite(candidate.getTime()));
+
+  if (!candidates.length) {
+    return new Date(now.getTime() + 60 * 1000);
+  }
+
+  return candidates.reduce((soonest, candidate) => (
+    candidate.getTime() < soonest.getTime() ? candidate : soonest
+  ));
 }
 
 async function sendReportDigestTest(storage, logger = console) {
@@ -127,6 +195,34 @@ async function sendReportDigestTest(storage, logger = console) {
     since,
     until,
     reportCount: uploads.length
+  };
+}
+
+async function sendMorningSyncLogTest(storage, logger = console) {
+  const settings = await storage.getAppSettings();
+  const recipients = parseRecipients(settings.morningSyncLogRecipients);
+  if (!recipients.length) {
+    throw new Error("Configure at least one morning sync log recipient before sending a test email.");
+  }
+
+  const testWindow = buildManualTestWindow(new Date());
+  const since = testWindow.since;
+  const until = testWindow.until;
+  const uploadEvents = await storage.listUploadEventsSince(since, until);
+
+  await sendMorningSyncLogEmail(recipients, uploadEvents, since, until, {
+    isTest: true
+  });
+
+  logger.log(`Sent test morning sync log with ${uploadEvents.length} upload event(s) to ${recipients.join(", ")}.`);
+
+  return {
+    recipients,
+    since,
+    until,
+    uploadCount: uploadEvents.length,
+    endpointCount: countUniqueEndpoints(uploadEvents),
+    totalBytes: sumUploadEventBytes(uploadEvents)
   };
 }
 
@@ -506,6 +602,84 @@ async function sendDigestEmail(recipients, uploads, sinceIso, untilIso, options 
       saveToSentItems: true
     }
   );
+
+}
+
+async function sendMorningSyncLogEmail(recipients, uploadEvents, sinceIso, untilIso, options = {}) {
+  const isTest = Boolean(options && options.isTest);
+  const accessToken = await getGraphAccessToken();
+  const subjectPrefix = isTest ? "[TEST] " : "";
+  const uploadCount = uploadEvents.length;
+  const endpointCount = countUniqueEndpoints(uploadEvents);
+  const totalBytes = sumUploadEventBytes(uploadEvents);
+  const csvContent = buildUploadEventsCsv(uploadEvents);
+  const attachmentDate = String(untilIso || new Date().toISOString()).slice(0, 10) || "sync-log";
+  const attachments = csvContent
+    ? [
+        {
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          name: `morning-sync-log-${attachmentDate}.csv`,
+          contentType: "text/csv",
+          contentBytes: Buffer.from(csvContent, "utf8").toString("base64")
+        }
+      ]
+    : [];
+
+  const bodyLines = [
+    isTest ? "Synchro morning sync log (manual test)" : "Synchro morning sync log",
+    "",
+    ...(isTest
+      ? [
+          "This was sent from the Admin Settings test action.",
+          "It does not change the scheduler's last-sent timestamp.",
+          ""
+        ]
+      : []),
+    `Window start: ${sinceIso}`,
+    `Window end: ${untilIso}`,
+    `Total uploads: ${uploadCount}`,
+    `Active endpoints: ${endpointCount}`,
+    `Total bytes: ${formatBytes(totalBytes)}`,
+    attachments.length ? `Attached CSV rows: ${uploadCount}` : "No CSV attachment was generated for this window.",
+    ""
+  ];
+
+  if (!uploadEvents.length) {
+    bodyLines.push("No uploads were recorded in this window.");
+  } else {
+    bodyLines.push("Recent uploads:");
+    uploadEvents.slice(0, 10).forEach((event) => {
+      bodyLines.push(
+        `  - ${event.receivedAt}  ${event.endpointSlug}/${event.relativePath} (${formatBytes(Number(event.bytes || 0))})`
+      );
+    });
+    if (uploadEvents.length > 10) {
+      bodyLines.push(`  ...and ${uploadEvents.length - 10} more upload(s) in the attached CSV.`);
+    }
+  }
+
+  const toRecipients = recipients.map((address) => ({
+    emailAddress: {
+      address
+    }
+  }));
+
+  await graphPostJson(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(O365_SENDER)}/sendMail`,
+    accessToken,
+    {
+      message: {
+        subject: `${subjectPrefix}Synchro Morning Sync Log (${uploadCount} upload${uploadCount === 1 ? "" : "s"})`,
+        body: {
+          contentType: "Text",
+          content: bodyLines.join("\n")
+        },
+        toRecipients,
+        ...(attachments.length ? { attachments } : {})
+      },
+      saveToSentItems: true
+    }
+  );
 }
 
 async function sendGilbarcoMonthEndEmail(recipients, monthKey, compiledReports, skipped = []) {
@@ -865,10 +1039,40 @@ function buildReportCsv(report) {
   return buildVerifoneCsv(report) || buildGilbarcoCsv(report) || buildGenericCsv(report);
 }
 
+function buildUploadEventsCsv(uploadEvents) {
+  if (!uploadEvents.length) {
+    return "";
+  }
+
+  const lines = [["received_at", "endpoint_slug", "relative_path", "bytes"].map(escapeCsv).join(",")];
+  uploadEvents.forEach((event) => {
+    lines.push([
+      event.receivedAt || "",
+      event.endpointSlug || "",
+      event.relativePath || "",
+      Number(event.bytes || 0)
+    ].map(escapeCsv).join(","));
+  });
+  return lines.join("\n") + "\n";
+}
+
+function countUniqueEndpoints(uploadEvents) {
+  return new Set(
+    uploadEvents
+      .map((event) => String(event.endpointSlug || "").trim())
+      .filter(Boolean)
+  ).size;
+}
+
+function sumUploadEventBytes(uploadEvents) {
+  return uploadEvents.reduce((total, event) => total + Number(event.bytes || 0), 0);
+}
+
 // ---------------------------------------------------------------------------
 
 module.exports = {
   startReportEmailDigestScheduler,
   sendReportDigestTest,
+  sendMorningSyncLogTest,
   sendParsedCsvEmail
 };

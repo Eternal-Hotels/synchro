@@ -251,5 +251,5 @@ Inside the web control panel, signed-in users can also open an endpoint explorer
 - Deleting a key removes the key record only. The stored files remain on disk in `storage/<endpointSlug>`.
 - Folder sync uploads preserve relative paths under `storage/<endpointSlug>/`.
 - Sessions are stored in memory, so active logins are cleared when the server restarts.
-- In `Settings`, use `Send Test Digest Now` to verify Graph mail delivery without waiting for the 7:00 AM scheduler.
+- In `Settings`, manage `Report Digest Delivery` and `Morning Sync Log` recipients separately. Use the test-send actions to verify Graph mail delivery without waiting for the scheduled send times.
 - For an internet-exposed deployment, put this behind HTTPS and consider adding CSRF protection, audit logging, and password reset flows.

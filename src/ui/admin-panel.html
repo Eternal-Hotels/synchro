@@ -139,36 +139,80 @@
           <div class="section-header">
             <div>
               <div class="section-kicker">Dispatch Settings</div>
-              <h2>Report Digest Delivery</h2>
-              <p class="subhead">Configure when the GASCO reporting digest goes out and who receives test or scheduled dispatch mail.</p>
+              <h2>Dispatch Mail Delivery</h2>
+              <p class="subhead">Configure who receives the scheduled report digest and the morning sync log, plus when each mailer runs.</p>
             </div>
           </div>
 
           <div class="panel-body">
-            <div class="form-grid">
-              <label>
-                Microsoft 365 Sender Account
-                <input id="setting-o365-sender" value="auditor@eternalhotels.com" readonly>
-              </label>
-              <label>
-                Daily Digest Time
-                <input id="setting-digest-time" type="time" value="07:00">
-              </label>
-              <label class="label-wide">
-                <span class="inline-toggle">
-                  <input id="setting-digest-enabled" type="checkbox">
-                  Enable daily report dispatch
-                </span>
-              </label>
-              <label class="label-wide">
-                Recipient Emails
-                <textarea id="setting-recipient-emails" rows="6" placeholder="one email per line or comma-separated"></textarea>
-              </label>
+            <div class="settings-grid">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Report Digest Delivery</h3>
+                    <p class="subhead">Send the daily parsed-report digest and month-end report bundle to the addresses defined here.</p>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <label>
+                    Microsoft 365 Sender Account
+                    <input id="setting-o365-sender" value="auditor@eternalhotels.com" readonly>
+                  </label>
+                  <label>
+                    Daily Digest Time
+                    <input id="setting-digest-time" type="time" value="07:00">
+                  </label>
+                  <label class="label-wide">
+                    <span class="inline-toggle">
+                      <input id="setting-digest-enabled" type="checkbox">
+                      Enable daily report dispatch
+                    </span>
+                  </label>
+                  <label class="label-wide">
+                    Recipient Emails
+                    <textarea id="setting-recipient-emails" rows="6" placeholder="one email per line or comma-separated"></textarea>
+                  </label>
+                </div>
+
+                <div class="toolbar-row settings-card-actions">
+                  <button id="test-digest-button" class="secondary">Send Test Digest</button>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <div>
+                    <h3>Morning Sync Log</h3>
+                    <p class="subhead">Email a morning summary of the upload activity recorded across all synced endpoints in the last window.</p>
+                  </div>
+                </div>
+
+                <div class="form-grid">
+                  <label>
+                    Morning Sync Time
+                    <input id="setting-morning-sync-time" type="time" value="07:00">
+                  </label>
+                  <label class="label-wide">
+                    <span class="inline-toggle">
+                      <input id="setting-morning-sync-enabled" type="checkbox">
+                      Enable morning sync log email
+                    </span>
+                  </label>
+                  <label class="label-wide">
+                    Recipient Emails
+                    <textarea id="setting-morning-sync-recipients" rows="6" placeholder="one email per line or comma-separated"></textarea>
+                  </label>
+                </div>
+
+                <div class="toolbar-row settings-card-actions">
+                  <button id="test-morning-sync-button" class="secondary">Send Test Morning Log</button>
+                </div>
+              </section>
             </div>
 
-            <div class="toolbar-row">
-              <button id="save-settings-button" class="primary">Save Dispatch Settings</button>
-              <button id="test-digest-button" class="secondary">Send Test Digest</button>
+            <div class="toolbar-row settings-actions">
+              <button id="save-settings-button" class="primary">Save Mail Settings</button>
             </div>
             <div id="settings-status" class="status"></div>
           </div>

@@ -34,7 +34,11 @@ const state = {
     reportDigestEnabled: false,
     reportDigestTime: "07:00",
     reportDigestRecipients: "",
-    reportDigestLastSentAt: ""
+    reportDigestLastSentAt: "",
+    morningSyncLogEnabled: false,
+    morningSyncLogTime: "07:00",
+    morningSyncLogRecipients: "",
+    morningSyncLogLastSentAt: ""
   }
 };
 
@@ -55,7 +59,11 @@ const settingsStatus = document.getElementById("settings-status");
 const settingDigestEnabledInput = document.getElementById("setting-digest-enabled");
 const settingDigestTimeInput = document.getElementById("setting-digest-time");
 const settingRecipientEmailsInput = document.getElementById("setting-recipient-emails");
+const settingMorningSyncEnabledInput = document.getElementById("setting-morning-sync-enabled");
+const settingMorningSyncTimeInput = document.getElementById("setting-morning-sync-time");
+const settingMorningSyncRecipientsInput = document.getElementById("setting-morning-sync-recipients");
 const testDigestButton = document.getElementById("test-digest-button");
+const testMorningSyncButton = document.getElementById("test-morning-sync-button");
 const keyCreatePanel = document.getElementById("key-create-panel");
 const keyNameInput = document.getElementById("key-name");
 const keyPaymentSystemInput = document.getElementById("key-payment-system");
@@ -99,6 +107,7 @@ const loginButton = document.getElementById("login-button");
 
 document.getElementById("save-settings-button").addEventListener("click", saveSettings);
 testDigestButton.addEventListener("click", sendTestDigest);
+testMorningSyncButton.addEventListener("click", sendTestMorningSyncLog);
 
 if (loginButton) {
   loginButton.addEventListener("click", login);
@@ -392,7 +401,11 @@ async function refreshAll() {
         reportDigestEnabled: Boolean(settingsPayload.reportDigestEnabled),
         reportDigestTime: String(settingsPayload.reportDigestTime || "07:00"),
         reportDigestRecipients: String(settingsPayload.reportDigestRecipients || ""),
-        reportDigestLastSentAt: String(settingsPayload.reportDigestLastSentAt || "")
+        reportDigestLastSentAt: String(settingsPayload.reportDigestLastSentAt || ""),
+        morningSyncLogEnabled: Boolean(settingsPayload.morningSyncLogEnabled),
+        morningSyncLogTime: String(settingsPayload.morningSyncLogTime || "07:00"),
+        morningSyncLogRecipients: String(settingsPayload.morningSyncLogRecipients || ""),
+        morningSyncLogLastSentAt: String(settingsPayload.morningSyncLogLastSentAt || "")
       };
       renderSettings();
     } else {
@@ -2178,15 +2191,19 @@ function renderSettings() {
   settingDigestEnabledInput.checked = Boolean(state.settings.reportDigestEnabled);
   settingDigestTimeInput.value = state.settings.reportDigestTime || "07:00";
   settingRecipientEmailsInput.value = state.settings.reportDigestRecipients || "";
+  settingMorningSyncEnabledInput.checked = Boolean(state.settings.morningSyncLogEnabled);
+  settingMorningSyncTimeInput.value = state.settings.morningSyncLogTime || "07:00";
+  settingMorningSyncRecipientsInput.value = state.settings.morningSyncLogRecipients || "";
 
-  if (state.settings.reportDigestLastSentAt) {
-    setSettingsStatus(
-      "Daily dispatch time: " + formatDigestTimeLabel(state.settings.reportDigestTime) +
-      ". Last digest sent at " + state.settings.reportDigestLastSentAt + "."
-    );
-  } else {
-    setSettingsStatus("Daily dispatch time: " + formatDigestTimeLabel(state.settings.reportDigestTime) + ". No digest has been sent yet.");
-  }
+  const digestSummary = state.settings.reportDigestLastSentAt
+    ? "Report digest: " + formatDigestTimeLabel(state.settings.reportDigestTime) +
+      ". Last sent at " + state.settings.reportDigestLastSentAt + "."
+    : "Report digest: " + formatDigestTimeLabel(state.settings.reportDigestTime) + ". No digest has been sent yet.";
+  const morningSummary = state.settings.morningSyncLogLastSentAt
+    ? "Morning sync log: " + formatDigestTimeLabel(state.settings.morningSyncLogTime) +
+      ". Last sent at " + state.settings.morningSyncLogLastSentAt + "."
+    : "Morning sync log: " + formatDigestTimeLabel(state.settings.morningSyncLogTime) + ". No morning sync log has been sent yet.";
+  setSettingsStatus(digestSummary + " " + morningSummary);
 }
 
 async function saveSettings() {
@@ -2198,7 +2215,10 @@ async function saveSettings() {
       body: JSON.stringify({
         reportDigestEnabled: settingDigestEnabledInput.checked,
         reportDigestTime: settingDigestTimeInput.value,
-        reportDigestRecipients: settingRecipientEmailsInput.value
+        reportDigestRecipients: settingRecipientEmailsInput.value,
+        morningSyncLogEnabled: settingMorningSyncEnabledInput.checked,
+        morningSyncLogTime: settingMorningSyncTimeInput.value,
+        morningSyncLogRecipients: settingMorningSyncRecipientsInput.value
       })
     });
     if (!response.ok) {
@@ -2209,7 +2229,11 @@ async function saveSettings() {
       reportDigestEnabled: Boolean(payload.reportDigestEnabled),
       reportDigestTime: String(payload.reportDigestTime || "07:00"),
       reportDigestRecipients: String(payload.reportDigestRecipients || ""),
-      reportDigestLastSentAt: String(payload.reportDigestLastSentAt || "")
+      reportDigestLastSentAt: String(payload.reportDigestLastSentAt || ""),
+      morningSyncLogEnabled: Boolean(payload.morningSyncLogEnabled),
+      morningSyncLogTime: String(payload.morningSyncLogTime || "07:00"),
+      morningSyncLogRecipients: String(payload.morningSyncLogRecipients || ""),
+      morningSyncLogLastSentAt: String(payload.morningSyncLogLastSentAt || "")
     };
     renderSettings();
     setSettingsStatus("Dispatch settings saved.");
@@ -2238,6 +2262,32 @@ async function sendTestDigest() {
     setSettingsStatus(error.message, true);
   } finally {
     testDigestButton.disabled = false;
+  }
+}
+
+async function sendTestMorningSyncLog() {
+  try {
+    setSettingsStatus("Sending test morning sync log...");
+    testMorningSyncButton.disabled = true;
+    const { response, payload } = await fetchJson("/api/admin/settings/test-morning-sync-log", {
+      method: "POST"
+    });
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not send test morning sync log.");
+    }
+
+    const recipientCount = Array.isArray(payload.recipients) ? payload.recipients.length : 0;
+    const uploadCount = Number(payload.uploadCount || 0);
+    const endpointCount = Number(payload.endpointCount || 0);
+    setSettingsStatus(
+      "Test morning sync log sent to " + recipientCount +
+      " recipient(s) with " + uploadCount +
+      " upload(s) across " + endpointCount + " endpoint(s)."
+    );
+  } catch (error) {
+    setSettingsStatus(error.message, true);
+  } finally {
+    testMorningSyncButton.disabled = false;
   }
 }
 
