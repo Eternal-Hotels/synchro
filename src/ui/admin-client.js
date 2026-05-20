@@ -2368,9 +2368,34 @@ function redirectToLogin() {
   window.location.replace(appUrl("/login"));
 }
 
+function isPendingAppStatusMessage(message) {
+  const normalized = String(message || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return /^(refreshing|loading|creating|rotating|updating|saving|building|emailing|signing)\b/.test(normalized);
+}
+
+function resolveAppStatusColor(message, isError) {
+  if (!String(message || "").trim()) {
+    return "";
+  }
+
+  if (isError) {
+    return "var(--status-negative)";
+  }
+
+  if (isPendingAppStatusMessage(message)) {
+    return "#f7fbff";
+  }
+
+  return "var(--status-positive)";
+}
+
 function setAppStatus(message, isError = false) {
   appStatus.textContent = message;
-  appStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
+  appStatus.style.color = resolveAppStatusColor(message, isError);
 }
 
 function setSettingsStatus(message, isError = false) {

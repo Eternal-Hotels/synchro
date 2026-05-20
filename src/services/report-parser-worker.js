@@ -3,10 +3,10 @@
 const { parentPort, workerData } = require("worker_threads");
 
 const {
-  parseManualGilbarcoReport,
-  parseMonthlyGilbarcoReport,
+  parseManualGilbarcoReportAsync,
+  parseMonthlyGilbarcoReportAsync,
   parseReportFile,
-  parseCurrentMonthReport
+  parseCurrentMonthReportAsync
 } = require("./report-parser");
 
 const TASK_HANDLERS = {
@@ -14,13 +14,13 @@ const TASK_HANDLERS = {
     return parseReportFile(taskArgs.filePath);
   },
   parseCurrentMonthReport(taskArgs) {
-    return parseCurrentMonthReport(taskArgs.rootPath, taskArgs.paymentSystem, taskArgs.monthKey);
+    return parseCurrentMonthReportAsync(taskArgs.rootPath, taskArgs.paymentSystem, taskArgs.monthKey);
   },
   parseMonthlyGilbarcoReport(taskArgs) {
-    return parseMonthlyGilbarcoReport(taskArgs.rootPath, taskArgs.monthKey);
+    return parseMonthlyGilbarcoReportAsync(taskArgs.rootPath, taskArgs.monthKey);
   },
   parseManualGilbarcoReport(taskArgs) {
-    return parseManualGilbarcoReport(taskArgs.rootPath, taskArgs.pdfFilenames);
+    return parseManualGilbarcoReportAsync(taskArgs.rootPath, taskArgs.pdfFilenames);
   }
 };
 

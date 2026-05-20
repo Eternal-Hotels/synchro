@@ -18,6 +18,8 @@
   --red: #d1433b;
   --danger: #b42d2d;
   --danger-soft: #fde3e0;
+  --status-positive: #8ff0b3;
+  --status-negative: #ff9f97;
   --shadow: 0 28px 70px rgba(4, 49, 80, 0.18);
   --shadow-soft: 0 16px 40px rgba(4, 49, 80, 0.1);
   --radius: 24px;
@@ -959,6 +961,12 @@ button.danger {
 .report-tree-year-summary {
   font-size: 1.1rem;
   cursor: pointer;
+  color: #111111;
+}
+
+.report-tree-year-summary strong,
+.report-tree-month > summary strong {
+  color: #111111;
 }
 
 .report-tree-stack {
@@ -969,6 +977,7 @@ button.danger {
 
 .report-tree-month > summary {
   cursor: pointer;
+  color: #111111;
 }
 
 .report-meta-card,

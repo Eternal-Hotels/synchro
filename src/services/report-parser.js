@@ -2,6 +2,7 @@
 
 const childProcess = require("child_process");
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
 function parseHtmlReportFile(filePath, options = {}) {
@@ -38,6 +39,34 @@ function parsePdfReportFile(filePath) {
   return JSON.parse(stdout);
 }
 
+function parsePdfReportFileAsync(filePath) {
+  const scriptPath = path.resolve(__dirname, "..", "pdf_report_parser.py");
+  const pythonBin = String(
+    process.env.SYNCHRO_PYTHON_BIN ||
+    process.env.PYTHON_BIN ||
+    "python3"
+  ).trim() || "python3";
+
+  return new Promise((resolve, reject) => {
+    childProcess.execFile(pythonBin, [scriptPath, filePath], {
+      cwd: path.resolve(__dirname, "..", ".."),
+      encoding: "utf8",
+      maxBuffer: 20 * 1024 * 1024
+    }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (parseError) {
+        reject(parseError);
+      }
+    });
+  });
+}
+
 function listGilbarcoReportMonths(rootPath) {
   const monthlyBuckets = new Map();
 
@@ -66,11 +95,7 @@ function listGilbarcoReportMonths(rootPath) {
     .sort((left, right) => right.month.localeCompare(left.month));
 }
 
-function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride = "") {
-  if (!Array.isArray(pdfFiles) || !pdfFiles.length) {
-    throw new Error("At least one PDF file must be provided.");
-  }
-
+function normalizeGilbarcoPdfFiles(pdfFiles) {
   const validPdfFiles = pdfFiles
     .map((file) => String(file).trim())
     .filter((file) => file && path.extname(file).toLowerCase() === ".pdf");
@@ -79,10 +104,18 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
     throw new Error("No valid PDF files were provided.");
   }
 
+  return validPdfFiles;
+}
+
+function buildGilbarcoCombinedReport(validPdfFiles, parsedReports, titleOverride = "", labelOverride = "") {
+  if (!Array.isArray(parsedReports) || !parsedReports.length) {
+    throw new Error("At least one parsed PDF report is required.");
+  }
+
+  const normalizedFiles = normalizeGilbarcoPdfFiles(validPdfFiles);
   const fuelTotals = new Map();
   const departmentTotals = new Map();
   const pluTotals = new Map();
-  const parsedReports = validPdfFiles.map((filePath) => parsePdfReportFile(filePath));
 
   parsedReports.forEach((report) => {
     const fuelSection = findSectionByHeaders(report.sections, [
@@ -164,11 +197,11 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
         const aggregate = getOrCreateAggregate(pluTotals, key, () => ({
           "PLU No.": row["PLU No."] || "",
           "Pkg. Qty": row["Pkg. Qty"] || "",
-          "Description": row.Description || "",
-          "Department": row.Department || "",
-          "Count": 0,
-          "Price": row.Price || "",
-          "Sales": 0
+          Description: row.Description || "",
+          Department: row.Department || "",
+          Count: 0,
+          Price: row.Price || "",
+          Sales: 0
         }));
         aggregate.Count += parseIntegerValue(row.Count);
         aggregate.Sales += parseCurrencyValue(row.Sales);
@@ -214,11 +247,11 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
       return {
         "PLU No.": row["PLU No."],
         "Pkg. Qty": row["Pkg. Qty"],
-        "Description": row.Description,
-        "Department": row.Department,
-        "Count": formatInteger(row.Count),
-        "Price": row.Price,
-        "Sales": formatCurrency(row.Sales),
+        Description: row.Description,
+        Department: row.Department,
+        Count: formatInteger(row.Count),
+        Price: row.Price,
+        Sales: formatCurrency(row.Sales),
         "% of Dept": formatPercent(departmentNetSales ? (row.Sales / departmentNetSales) * 100 : 0),
         "% of Total": formatPercent(totalPluSales ? (row.Sales / totalPluSales) * 100 : 0)
       };
@@ -227,7 +260,7 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
   const referenceReport = parsedReports[0];
   const displayTitle = titleOverride || "Gilbarco Combined Report";
   const displayLabel = labelOverride || "Combined";
-  
+
   return {
     sourceFile: "",
     reportTitle: displayTitle,
@@ -237,8 +270,8 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
     openPeriod: parsedReports[0].openPeriod || "",
     closePeriod: parsedReports[parsedReports.length - 1].closePeriod || "",
     scopeLabel: referenceReport.scopeLabel || "",
-    sourceReportCount: validPdfFiles.length,
-    sourceFiles: validPdfFiles.map((filePath) => path.basename(filePath)),
+    sourceReportCount: normalizedFiles.length,
+    sourceFiles: normalizedFiles.map((filePath) => path.basename(filePath)),
     sections: [
       {
         title: "Gasoline Grade",
@@ -291,12 +324,50 @@ function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride 
   };
 }
 
-function parseMonthlyGilbarcoReport(rootPath, monthKey) {
-  const normalizedMonth = String(monthKey || "").trim();
-  if (!/^\d{4}-\d{2}$/.test(normalizedMonth)) {
-    throw new Error("A month in YYYY-MM format is required.");
+function resolveGilbarcoParseConcurrency(fileCount) {
+  const fallbackParallelism = Array.isArray(os.cpus()) && os.cpus().length
+    ? os.cpus().length
+    : 1;
+  const available = typeof os.availableParallelism === "function"
+    ? os.availableParallelism()
+    : fallbackParallelism;
+  const safeParallelism = Math.max(1, Number(available) - 1);
+  return Math.max(1, Math.min(Number(fileCount) || 0, safeParallelism));
+}
+
+async function mapWithConcurrency(items, concurrency, iteratee) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.max(1, Math.min(items.length, concurrency));
+
+  async function runWorker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= items.length) {
+        return;
+      }
+      results[currentIndex] = await iteratee(items[currentIndex], currentIndex);
+    }
   }
 
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
+}
+
+async function combineGilbarcoReportFilesAsync(pdfFiles, titleOverride = "", labelOverride = "") {
+  const validPdfFiles = normalizeGilbarcoPdfFiles(pdfFiles);
+  const concurrency = resolveGilbarcoParseConcurrency(validPdfFiles.length);
+
+  if (concurrency <= 1) {
+    return combineGilbarcoReportFiles(validPdfFiles, titleOverride, labelOverride);
+  }
+
+  const parsedReports = await mapWithConcurrency(validPdfFiles, concurrency, (filePath) => parsePdfReportFileAsync(filePath));
+  return buildGilbarcoCombinedReport(validPdfFiles, parsedReports, titleOverride, labelOverride);
+}
+
+function collectMonthlyGilbarcoPdfFiles(rootPath, normalizedMonth) {
   const pdfFiles = collectFilesRecursively(rootPath)
     .filter((filePath) => path.extname(filePath).toLowerCase() === ".pdf")
     .filter((filePath) => inferMonthKeyFromGilbarcoFilename(path.basename(filePath)) === normalizedMonth)
@@ -305,6 +376,27 @@ function parseMonthlyGilbarcoReport(rootPath, monthKey) {
   if (!pdfFiles.length) {
     throw new Error(`No Gilbarco PDF reports were found for ${normalizedMonth}.`);
   }
+
+  return pdfFiles;
+}
+
+function combineGilbarcoReportFiles(pdfFiles, titleOverride = "", labelOverride = "") {
+  if (!Array.isArray(pdfFiles) || !pdfFiles.length) {
+    throw new Error("At least one PDF file must be provided.");
+  }
+
+  const validPdfFiles = normalizeGilbarcoPdfFiles(pdfFiles);
+  const parsedReports = validPdfFiles.map((filePath) => parsePdfReportFile(filePath));
+  return buildGilbarcoCombinedReport(validPdfFiles, parsedReports, titleOverride, labelOverride);
+}
+
+function parseMonthlyGilbarcoReport(rootPath, monthKey) {
+  const normalizedMonth = String(monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(normalizedMonth)) {
+    throw new Error("A month in YYYY-MM format is required.");
+  }
+
+  const pdfFiles = collectMonthlyGilbarcoPdfFiles(rootPath, normalizedMonth);
 
   const combined = combineGilbarcoReportFiles(
     pdfFiles,
@@ -320,7 +412,28 @@ function parseMonthlyGilbarcoReport(rootPath, monthKey) {
   };
 }
 
-function parseManualGilbarcoReport(rootPath, pdfFilenames) {
+async function parseMonthlyGilbarcoReportAsync(rootPath, monthKey) {
+  const normalizedMonth = String(monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(normalizedMonth)) {
+    throw new Error("A month in YYYY-MM format is required.");
+  }
+
+  const pdfFiles = collectMonthlyGilbarcoPdfFiles(rootPath, normalizedMonth);
+  const combined = await combineGilbarcoReportFilesAsync(
+    pdfFiles,
+    `${formatMonthLabel(normalizedMonth)} Gilbarco Monthly Report`,
+    formatMonthLabel(normalizedMonth)
+  );
+
+  return {
+    ...combined,
+    sourceFile: rootPath,
+    month: normalizedMonth,
+    sourceFiles: pdfFiles.map((filePath) => path.relative(rootPath, filePath).replace(/\\/g, "/"))
+  };
+}
+
+function resolveManualGilbarcoPdfPaths(rootPath, pdfFilenames) {
   if (!Array.isArray(pdfFilenames) || !pdfFilenames.length) {
     throw new Error("At least one PDF filename must be provided.");
   }
@@ -330,11 +443,10 @@ function parseManualGilbarcoReport(rootPath, pdfFilenames) {
     throw new Error("Endpoint directory not found.");
   }
 
-  const resolvedPaths = pdfFilenames.map((filename) => {
+  return pdfFilenames.map((filename) => {
     const normalized = String(filename).trim();
     const fullPath = path.join(endpointDir, normalized);
-    
-    // Verify the path is within the endpoint directory (prevent directory traversal)
+
     const resolved = path.resolve(fullPath);
     const resolvedDir = path.resolve(endpointDir);
     if (!resolved.startsWith(resolvedDir)) {
@@ -351,8 +463,27 @@ function parseManualGilbarcoReport(rootPath, pdfFilenames) {
 
     return resolved;
   });
+}
+
+function parseManualGilbarcoReport(rootPath, pdfFilenames) {
+  const resolvedPaths = resolveManualGilbarcoPdfPaths(rootPath, pdfFilenames);
 
   const combined = combineGilbarcoReportFiles(
+    resolvedPaths,
+    "Gilbarco Manual Selection Report",
+    "Manual Selection"
+  );
+
+  return {
+    ...combined,
+    sourceFile: rootPath,
+    sourceFiles: pdfFilenames.map((f) => String(f).trim())
+  };
+}
+
+async function parseManualGilbarcoReportAsync(rootPath, pdfFilenames) {
+  const resolvedPaths = resolveManualGilbarcoPdfPaths(rootPath, pdfFilenames);
+  const combined = await combineGilbarcoReportFilesAsync(
     resolvedPaths,
     "Gilbarco Manual Selection Report",
     "Manual Selection"
@@ -2057,10 +2188,29 @@ function parseCurrentMonthReport(rootPath, paymentSystem, monthKey) {
   };
 }
 
+async function parseCurrentMonthReportAsync(rootPath, paymentSystem, monthKey) {
+  const normalizedMonth = String(monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(normalizedMonth)) {
+    throw new Error("A month in YYYY-MM format is required.");
+  }
+  if (paymentSystem === "verifone_commander") {
+    return parseCurrentMonthReport(rootPath, paymentSystem, normalizedMonth);
+  }
+
+  const combined = await parseMonthlyGilbarcoReportAsync(rootPath, normalizedMonth);
+  return {
+    ...combined,
+    reportTitle: `Current Month Gilbarco Report (${formatMonthLabel(normalizedMonth)})`,
+    periodLabel: `Current Month (${formatMonthLabel(normalizedMonth)})`
+  };
+}
+
 module.exports = {
   listGilbarcoReportMonths,
   parseMonthlyGilbarcoReport,
+  parseMonthlyGilbarcoReportAsync,
   parseManualGilbarcoReport,
+  parseManualGilbarcoReportAsync,
   listPdfFilesInEndpoint,
   parseReportFile,
   parseHtmlReportFile,
@@ -2071,5 +2221,7 @@ module.exports = {
   buildCategoryCsv,
   buildReportTree,
   parseVerifoneMonthlyReport,
-  parseCurrentMonthReport
+  parseCurrentMonthReport,
+  parseCurrentMonthReportAsync,
+  resolveGilbarcoParseConcurrency
 };
