@@ -31,6 +31,13 @@ async function tryHandleUiRoute(req, res, pathname, adminUi) {
     return true;
   }
 
+  // GET /gasco.png — serve the local GASCO logo used in the masthead.
+  if (req.method === "GET" && pathname === "/gasco.png") {
+    res.writeHead(200, { "Content-Type": "image/png" });
+    res.end(adminUi.renderGascoLogo());
+    return true;
+  }
+
   // This request is not for a UI asset. Signal to server.js to try the next handler.
   return false;
 }

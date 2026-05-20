@@ -350,7 +350,7 @@ async function refreshAll() {
 
 async function createKey() {
   try {
-    setAppStatus("Creating endpoint key...");
+    setAppStatus("Creating site key...");
     const { response, payload } = await fetchJson("/api/admin/keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -365,10 +365,10 @@ async function createKey() {
     keyNameInput.value = "";
     window.alert(
       "Copy this API key now. It will not be shown again.\n\n" +
-      "Endpoint: " + payload.slug + "\n" +
+      "Site: " + payload.slug + "\n" +
       "API key: " + payload.apiKey
     );
-    setAppStatus("Endpoint key created.");
+    setAppStatus("Site key created.");
     await refreshAll();
   } catch (error) {
     setAppStatus(error.message, true);
@@ -377,7 +377,7 @@ async function createKey() {
 
 async function rotateKey(slug) {
   try {
-    setAppStatus("Rotating endpoint key...");
+    setAppStatus("Rotating site key...");
     const { response, payload } = await fetchJson("/api/admin/keys/" + slug + "/rotate", {
       method: "POST"
     });
@@ -386,10 +386,10 @@ async function rotateKey(slug) {
     }
     window.alert(
       "Copy this new API key now. The previous key is no longer valid.\n\n" +
-      "Endpoint: " + payload.slug + "\n" +
+      "Site: " + payload.slug + "\n" +
       "API key: " + payload.apiKey
     );
-    setAppStatus("Endpoint key rotated.");
+    setAppStatus("Site key rotated.");
     await refreshAll();
   } catch (error) {
     setAppStatus(error.message, true);
@@ -440,7 +440,7 @@ async function mutate(url, options, successMessage) {
 
 function renderKeys() {
   if (!state.keys.length) {
-    keyListEl.innerHTML = '<div class="card"><div class="empty">No endpoint keys exist yet.</div></div>';
+    keyListEl.innerHTML = '<div class="card"><div class="empty">No GASCO sites are configured yet.</div></div>';
     closeEndpointInfo();
     return;
   }
@@ -461,7 +461,7 @@ function renderKeys() {
       "<div class=\"card-head\">" +
       "<div class=\"endpoint-summary\"><h2>" + escapeHtml(key.name) + "</h2>" + badge + "</div>" +
       "<div class=\"toolbar-row endpoint-actions\">" + actions +
-      "<button class=\"secondary\" data-info-slug=\"" + escapeHtml(key.slug) + "\">Info</button>" +
+      "<button class=\"secondary\" data-info-slug=\"" + escapeHtml(key.slug) + "\">Site Profile</button>" +
       "</div>" +
       "</article>";
   }).join("");
@@ -489,18 +489,18 @@ function bindKeyManagementActions(container) {
       const slug = button.dataset.slug;
       const action = button.dataset.action;
       if (action === "revoke") {
-        await mutate("/api/admin/keys/" + slug + "/revoke", { method: "POST" }, "Endpoint revoked.");
+        await mutate("/api/admin/keys/" + slug + "/revoke", { method: "POST" }, "Site key revoked.");
       } else if (action === "restore") {
-        await mutate("/api/admin/keys/" + slug + "/restore", { method: "POST" }, "Endpoint restored.");
+        await mutate("/api/admin/keys/" + slug + "/restore", { method: "POST" }, "Site key restored.");
       } else if (action === "rotate") {
-        const confirmed = window.confirm("Rotate the API key for \"" + slug + "\"? The current key will stop working immediately.");
+        const confirmed = window.confirm("Rotate the site API key for \"" + slug + "\"? The current key will stop working immediately.");
         if (confirmed) {
           await rotateKey(slug);
         }
       } else if (action === "delete-key") {
-        const confirmed = window.confirm("Delete key \"" + slug + "\"? Stored files stay on disk.");
+        const confirmed = window.confirm("Delete site key \"" + slug + "\"? Stored files stay on disk.");
         if (confirmed) {
-          await mutate("/api/admin/keys/" + slug, { method: "DELETE" }, "Key deleted. Stored files were kept.");
+          await mutate("/api/admin/keys/" + slug, { method: "DELETE" }, "Site key deleted. Stored files were kept.");
         }
       }
     });
@@ -510,7 +510,7 @@ function bindKeyManagementActions(container) {
 function openEndpointInfo(slug) {
   const key = findKeyBySlug(slug);
   if (!key) {
-    setAppStatus("That endpoint could not be found.", true);
+    setAppStatus("That site could not be found.", true);
     return;
   }
 
@@ -524,8 +524,8 @@ function renderEndpointInfo(key) {
   const paymentSystemLabel = friendlyPaymentSystem(key.paymentSystem);
   const isGilbarco = isGilbarcoPaymentSystem(key.paymentSystem);
   const explorerSummary = key.rootEntryCount
-    ? escapeHtml(String(key.rootEntryCount)) + " top-level item(s) stored at this endpoint"
-    : "No synced items at the endpoint root yet.";
+    ? escapeHtml(String(key.rootEntryCount)) + " top-level item(s) stored for this site"
+    : "No synced station files are stored at the site root yet.";
   const lastUsedLine = key.lastUsedAt
     ? "<div>Last used: " + escapeHtml(key.lastUsedAt) + "</div>"
     : "<div>Last used: <code>Never</code></div>";
@@ -534,38 +534,38 @@ function renderEndpointInfo(key) {
     : "<div>Last rotated: <code>Never</code></div>";
 
   const currentMonthBlurb = isGilbarco
-    ? "Combine every Gilbarco StoreClose PDF uploaded so far this month into a single report."
-    : "Combine every Verifone daily report (DR-*.html) uploaded so far this month into a single report.";
+    ? "Combine every Gilbarco StoreClose PDF uploaded for this site so far this month into one station report."
+    : "Combine every Verifone daily report (DR-*.html) uploaded for this site so far this month into one station report.";
 
-  endpointInfoTitle.textContent = key.name + " Info";
-  endpointInfoSubtitle.textContent = "Endpoint details, storage tools, and report options.";
+  endpointInfoTitle.textContent = key.name + " Site Profile";
+  endpointInfoSubtitle.textContent = "Site details, storage tools, and reporting options.";
   endpointInfoBody.innerHTML =
     "<section class=\"report-section endpoint-info-grid\">" +
     "<div class=\"endpoint-info-meta\">" +
-    "<div>Endpoint API: <code>" + escapeHtml(appPath("/api/upload/" + key.slug)) + "</code></div>" +
+    "<div>Site upload API: <code>" + escapeHtml(appPath("/api/upload/" + key.slug)) + "</code></div>" +
     "<div>Created: " + escapeHtml(key.createdAt) + "</div>" +
     lastUsedLine +
     rotatedLine +
-    "<div>Payment system: <code>" + escapeHtml(paymentSystemLabel) + "</code></div>" +
-    "<div>Storage folder: <code>storage/" + escapeHtml(key.slug) + "</code></div>" +
+    "<div>Controller: <code>" + escapeHtml(paymentSystemLabel) + "</code></div>" +
+    "<div>Site storage folder: <code>storage/" + escapeHtml(key.slug) + "</code></div>" +
     "</div>" +
     "</section>" +
     "<section class=\"files\">" +
     (state.user.permissions.manageKeys
-      ? "<div class=\"file-row\"><div><strong>Payment System</strong><br><small>Choose how this endpoint's monthly reports are handled.</small></div><div><select data-payment-system-slug=\"" + escapeHtml(key.slug) + "\">" +
+      ? "<div class=\"file-row\"><div><strong>Payment System</strong><br><small>Choose how this site's monthly reports are handled.</small></div><div><select data-payment-system-slug=\"" + escapeHtml(key.slug) + "\">" +
         "<option value=\"gilbarco_passport\"" + (isGilbarco ? " selected" : "") + ">Gilbarco Passport</option>" +
         "<option value=\"verifone_commander\"" + (!isGilbarco ? " selected" : "") + ">Verifone Commander</option>" +
         "</select></div></div>"
       : "") +
     (state.user.permissions.manageKeys && !isGilbarco
-      ? "<div class=\"file-row\"><div><strong>Agent Credentials</strong><br><small>Saved in the web API so Synchro Companion can fetch the current Verifone Commander username and password for this endpoint.</small></div><div class=\"endpoint-agent-controls\">" +
+      ? "<div class=\"file-row\"><div><strong>Station Agent Credentials</strong><br><small>Saved in the web API so Synchro Companion can fetch the current Verifone Commander username and password for this site.</small></div><div class=\"endpoint-agent-controls\">" +
         "<input type=\"text\" placeholder=\"Commander username\" data-verifone-username=\"" + escapeHtml(key.slug) + "\" value=\"" + escapeHtml(key.verifoneUsername || "") + "\">" +
         "<input type=\"password\" placeholder=\"Commander password\" data-verifone-password=\"" + escapeHtml(key.slug) + "\" value=\"" + escapeHtml(key.verifonePassword || "") + "\">" +
         "<button class=\"secondary\" data-agent-config-save=\"" + escapeHtml(key.slug) + "\">Save Credentials</button>" +
         "</div></div>"
       : "") +
-    "<div class=\"file-row\"><div><strong>Report Explorer</strong><br><small>" + explorerSummary + " Browse reports grouped by year and month.</small></div><div><button class=\"explorer-link\" data-explorer-slug=\"" + escapeHtml(key.slug) + "\" data-explorer-name=\"" + escapeHtml(key.name) + "\" data-explorer-payment=\"" + escapeHtml(key.paymentSystem) + "\">Open Report Explorer</button></div></div>" +
-    "<div class=\"file-row\"><div><strong>Current Month Report</strong><br><small>" + escapeHtml(currentMonthBlurb) + "</small></div><div><button class=\"explorer-link\" data-current-month-slug=\"" + escapeHtml(key.slug) + "\" data-current-month-name=\"" + escapeHtml(key.name) + "\" data-current-month-payment=\"" + escapeHtml(key.paymentSystem) + "\">Generate Current Month Report</button></div></div>" +
+    "<div class=\"file-row\"><div><strong>Site Report Explorer</strong><br><small>" + explorerSummary + " Browse reports grouped by year and month.</small></div><div><button class=\"explorer-link\" data-explorer-slug=\"" + escapeHtml(key.slug) + "\" data-explorer-name=\"" + escapeHtml(key.name) + "\" data-explorer-payment=\"" + escapeHtml(key.paymentSystem) + "\">Open Site Reports</button></div></div>" +
+    "<div class=\"file-row\"><div><strong>Current Month Report</strong><br><small>" + escapeHtml(currentMonthBlurb) + "</small></div><div><button class=\"explorer-link\" data-current-month-slug=\"" + escapeHtml(key.slug) + "\" data-current-month-name=\"" + escapeHtml(key.name) + "\" data-current-month-payment=\"" + escapeHtml(key.paymentSystem) + "\">Build Current Month Report</button></div></div>" +
     "</section>";
 
   bindEndpointInfoActions();
@@ -804,12 +804,12 @@ function renderMonthlyViewerAuto() {
     : "";
 
   if (!monthsHtml && !manualButtonHtml) {
-    monthlyList.innerHTML = '<div class="empty">No month buckets or PDF files were found for this endpoint.</div>';
+    monthlyList.innerHTML = '<div class="empty">No month buckets or station PDFs were found for this site.</div>';
     return;
   }
 
   const noMonthsMessage = !monthsHtml && manualButtonHtml
-    ? "<div class=\"empty\" style=\"margin-bottom: 16px;\">No auto-detected months found. Use manual selection below to choose specific PDFs.</div>"
+    ? '<div class="empty empty-spaced">No auto-detected months found. Use manual selection below to choose specific station PDFs.</div>'
     : "";
 
   monthlyList.innerHTML = noMonthsMessage + monthsHtml + manualButtonHtml;
@@ -850,13 +850,13 @@ function renderMonthlyViewerManual() {
   }).join("");
 
   const buildButtonHtml = state.monthlyViewer.selectedPdfs.size > 0
-    ? "<div class=\"monthly-row\" style=\"padding: 14px 0;\"><button class=\"primary\" data-action=\"build-manual\" style=\"width: 100%;\">Build Report from " + state.monthlyViewer.selectedPdfs.size + " Selected PDF(s)</button></div>"
-    : "<div class=\"monthly-row\" style=\"padding: 14px 0;\"><p class=\"explorer-path\">Select at least one PDF to build a report.</p></div>";
+    ? "<div class=\"monthly-row monthly-manual-build\"><button class=\"primary\" data-action=\"build-manual\">Build Report from " + state.monthlyViewer.selectedPdfs.size + " Selected PDF(s)</button></div>"
+    : '<div class="monthly-row monthly-manual-build"><p class="explorer-path">Select at least one PDF to build a report.</p></div>';
 
   monthlyList.innerHTML = backButtonHtml +
-    "<div style=\"padding: 14px; border-bottom: 1px solid rgba(141, 118, 78, 0.16);\">" +
+    '<div class="monthly-manual-panel">' +
     "<strong>Select PDF Files</strong>" +
-    "<div class=\"checkbox-list\" style=\"margin-top: 12px;\">" + pdfListHtml + "</div>" +
+    '<div class="checkbox-list monthly-manual-checklist">' + pdfListHtml + '</div>' +
     "</div>" + buildButtonHtml;
 
   monthlyList.querySelectorAll("input[data-pdf-file]").forEach((checkbox) => {
@@ -963,7 +963,7 @@ async function loadReportTree(slug, name, paymentSystem) {
 function renderReportTree() {
   const tree = state.explorer.tree;
   if (!tree) {
-    explorerList.innerHTML = '<div class="empty">No report data is available.</div>';
+    explorerList.innerHTML = '<div class="empty">No site report data is available.</div>';
     return;
   }
 
@@ -972,7 +972,7 @@ function renderReportTree() {
 
   const years = Array.isArray(tree.years) ? tree.years : [];
   if (!years.length) {
-    explorerList.innerHTML = '<div class="empty">No dated reports have been detected yet for this endpoint.</div>';
+    explorerList.innerHTML = '<div class="empty">No dated station reports have been detected yet for this site.</div>';
     bindReportTreeActions();
     return;
   }
@@ -1013,13 +1013,13 @@ function renderReportTree() {
 
       const monthActions = [];
       if (isGilbarco && month.canCompile) {
-        monthActions.push('<button class="secondary" data-compile-month="' + escapeHtml(month.month) + '" data-compile-label="' + escapeHtml(month.label) + '">Compile Monthly Report</button>');
+        monthActions.push('<button class="secondary" data-compile-month="' + escapeHtml(month.month) + '" data-compile-label="' + escapeHtml(month.label) + '">Build Monthly Report</button>');
       }
       if (!isGilbarco && month.eomReport) {
         monthActions.push('<button class="secondary" data-open-eom-path="' + escapeHtml(month.eomReport.path) + '" data-open-eom-name="' + escapeHtml(month.eomReport.name) + '">Open End-of-Month Report</button>');
       }
       const actionsHtml = monthActions.length
-        ? '<div class="monthly-row" style="margin-top:10px;"><div><strong>' + escapeHtml(month.label) + '</strong><br><span class="explorer-path">'
+        ? '<div class="monthly-row report-tree-actions"><div><strong>' + escapeHtml(month.label) + '</strong><br><span class="explorer-path">'
           + escapeHtml(String(month.reportCount)) + ' report(s)'
           + (month.eomReport ? ' &middot; EOM: ' + escapeHtml(month.eomReport.name) : '')
           + '</span></div><div class="explorer-actions">' + monthActions.join("") + '</div></div>'
@@ -1030,15 +1030,15 @@ function renderReportTree() {
         + escapeHtml(String(month.reportCount)) + ' report(s)'
         + (month.eomReport ? ' &middot; EOM available' : '')
         + '</summary>'
-        + '<div class="explorer-list" style="padding-top:10px;">' + (reportsHtml || '<div class="empty">No reports in this month.</div>') + '</div>'
+        + '<div class="explorer-list report-tree-report-list">' + (reportsHtml || '<div class="empty">No reports in this month.</div>') + '</div>'
         + actionsHtml
         + '</details>';
     }).join("");
 
-    return '<details class="report-tree-year"' + (yearOpen ? ' open' : '') + ' data-year-key="' + escapeHtml(year.year) + '" style="border:1px solid rgba(141,118,78,0.16); border-radius:2px; padding:12px 16px; background:rgba(255,255,255,0.6);">'
-      + '<summary style="font-size:1.1rem; cursor:pointer;"><strong>' + escapeHtml(year.label) + '</strong> &middot; '
+    return '<details class="report-tree-year"' + (yearOpen ? ' open' : '') + ' data-year-key="' + escapeHtml(year.year) + '">'
+      + '<summary class="report-tree-year-summary"><strong>' + escapeHtml(year.label) + '</strong> &middot; '
       + escapeHtml(String(monthCount)) + ' month(s)</summary>'
-      + '<div style="display:grid; gap:10px; margin-top:12px;">' + monthsHtml + '</div>'
+      + '<div class="report-tree-stack">' + monthsHtml + '</div>'
       + '</details>';
   }).join("");
 
@@ -1181,7 +1181,7 @@ async function loadExplorerLegacy(slug, name, currentPath) {
     state.explorer.entries = payload.entries;
     explorerSubtitle.textContent = payload.currentPath
       ? "Browsing " + payload.currentPath
-      : "Browsing endpoint root";
+      : "Browsing site root";
     renderExplorer();
     setExplorerStatus(payload.entries.length ? "" : "This folder is empty.");
   } catch (error) {
@@ -1925,17 +1925,17 @@ function downloadTextFile(filename, contents, contentType) {
 
 function setExplorerStatus(message, isError = false) {
   explorerStatus.textContent = message;
-  explorerStatus.style.color = isError ? "#b42318" : "#6f6658";
+  explorerStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function setReportStatus(message, isError = false) {
   reportStatus.textContent = message;
-  reportStatus.style.color = isError ? "#b42318" : "#6f6658";
+  reportStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function setMonthlyStatus(message, isError = false) {
   monthlyStatus.textContent = message;
-  monthlyStatus.style.color = isError ? "#b42318" : "#6f6658";
+  monthlyStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function renderSettings() {
@@ -1945,17 +1945,17 @@ function renderSettings() {
 
   if (state.settings.reportDigestLastSentAt) {
     setSettingsStatus(
-      "Daily digest time: " + formatDigestTimeLabel(state.settings.reportDigestTime) +
+      "Daily dispatch time: " + formatDigestTimeLabel(state.settings.reportDigestTime) +
       ". Last digest sent at " + state.settings.reportDigestLastSentAt + "."
     );
   } else {
-    setSettingsStatus("Daily digest time: " + formatDigestTimeLabel(state.settings.reportDigestTime) + ". No digest has been sent yet.");
+    setSettingsStatus("Daily dispatch time: " + formatDigestTimeLabel(state.settings.reportDigestTime) + ". No digest has been sent yet.");
   }
 }
 
 async function saveSettings() {
   try {
-    setSettingsStatus("Saving settings...");
+    setSettingsStatus("Saving dispatch settings...");
     const { response, payload } = await fetchJson("/api/admin/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -1976,7 +1976,7 @@ async function saveSettings() {
       reportDigestLastSentAt: String(payload.reportDigestLastSentAt || "")
     };
     renderSettings();
-    setSettingsStatus("Settings saved.");
+    setSettingsStatus("Dispatch settings saved.");
   } catch (error) {
     setSettingsStatus(error.message, true);
   }
@@ -2020,7 +2020,7 @@ function cssEscape(value) {
 
 function renderUsers() {
   if (!state.users.length) {
-    userListEl.innerHTML = '<div class="card"><div class="empty">No users found.</div></div>';
+    userListEl.innerHTML = '<div class="card"><div class="empty">No operators found.</div></div>';
     return;
   }
 
@@ -2030,7 +2030,7 @@ function renderUsers() {
       : '<span class="badge">Active</span>';
     const scopes = user.role === "viewer"
       ? renderUserScopeEditor(user)
-      : '<div class="empty">All endpoints available through manager access.</div>';
+      : '<div class="empty">All sites available through manager access.</div>';
 
     return '<article class="card">' +
       '<div class="card-head">' +
@@ -2047,7 +2047,7 @@ function renderUsers() {
       '</div>' +
       '<div class="meta">' +
       '<div>Created: ' + escapeHtml(user.createdAt) + '</div>' +
-      '<div>Permissions: ' + escapeHtml(user.permissions.manageKeys ? "Can manage API keys and users" : "Can view assigned endpoint uploads only") + '</div>' +
+      '<div>Permissions: ' + escapeHtml(user.permissions.manageKeys ? "Can manage site keys and users" : "Can view assigned site uploads only") + '</div>' +
       '</div>' +
       '<div class="permissions">' + scopes + '</div>' +
       '</article>';
@@ -2063,24 +2063,24 @@ function renderUsers() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpointScopes: selected })
-        }, "Viewer endpoint access updated.");
+        }, "Viewer site access updated.");
       } else if (action === "disable") {
         await mutate("/api/admin/users/" + id, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disabled: true })
-        }, "User disabled.");
+        }, "Operator disabled.");
       } else if (action === "enable") {
         await mutate("/api/admin/users/" + id, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ disabled: false })
-        }, "User enabled.");
+        }, "Operator enabled.");
       } else if (action === "delete") {
         const username = button.dataset.username;
-        const confirmed = window.confirm('Delete user "' + username + '"?');
+        const confirmed = window.confirm('Delete operator "' + username + '"?');
         if (confirmed) {
-          await mutate("/api/admin/users/" + id, { method: "DELETE" }, "User deleted.");
+          await mutate("/api/admin/users/" + id, { method: "DELETE" }, "Operator deleted.");
         }
       }
     });
@@ -2093,14 +2093,14 @@ function renderScopeChecklist() {
         '<label class="checkbox-item"><input type="checkbox" value="' + escapeHtml(key.slug) + '"> <span>' +
         escapeHtml(key.name) + ' (<code>' + escapeHtml(key.slug) + '</code>)</span></label>'
       )).join("")
-    : '<div class="empty">Create at least one endpoint before assigning viewer access.</div>';
+    : '<div class="empty">Create at least one site before assigning viewer access.</div>';
   endpointScopeList.innerHTML = checkboxes;
   syncScopeVisibility();
 }
 
 function renderUserScopeEditor(user) {
   if (!state.keys.length) {
-    return '<div class="empty">No endpoints available to assign.</div>';
+    return '<div class="empty">No sites available to assign.</div>';
   }
 
   return '<div class="checkbox-list">' + state.keys.map((key) => {
@@ -2121,17 +2121,17 @@ function selectedScopes() {
 
 function setAuthStatus(message, isError = false) {
   authStatus.textContent = message;
-  authStatus.style.color = isError ? "#b42318" : "#6f6658";
+  authStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function setAppStatus(message, isError = false) {
   appStatus.textContent = message;
-  appStatus.style.color = isError ? "#b42318" : "#6f6658";
+  appStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function setSettingsStatus(message, isError = false) {
   settingsStatus.textContent = message;
-  settingsStatus.style.color = isError ? "#b42318" : "#6f6658";
+  settingsStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
 }
 
 function formatDigestTimeLabel(value) {

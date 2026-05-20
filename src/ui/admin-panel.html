@@ -3,27 +3,50 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synchro Admin</title>
+  <title>GASCO Station Command</title>
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <main class="shell">
-    <section class="hero">
-      <div class="hero-copy">
-        <div class="eyebrow">Eternal Hotels | Upload Control Panel</div>
-        <h1>Synchro ERM Console</h1>
-        <p class="subhead">Enterprise endpoint and report operations for managed properties across your portfolio.</p>
+    <section class="masthead panel">
+      <div class="masthead-bar">
+        <div class="masthead-contact">info@gascofuel.com</div>
+        <div class="masthead-logo" aria-label="GasCo Fuel">
+          <img src="/gasco.png" alt="GasCo Fuel logo">
+        </div>
+        <div class="masthead-region">Washington | Oregon | Idaho Retail Fuel Network</div>
       </div>
-      <div id="user-pill" class="user-pill">
-        <span id="user-label"></span>
-        <button id="logout-button" class="secondary">Log Out</button>
+      <div class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow">GasCo Fuel | Station Operations Network</div>
+          <h1>GASCO Station Command</h1>
+          <p class="subhead">A unified operations room for GASCO fuel sites, report uploads, endpoint access, and daily dispatch across the retail network.</p>
+          <div class="hero-banner">Increase Retail Fuel Sales</div>
+          <div class="service-strip" aria-label="Managed service areas">
+            <span class="service-pill">Fuel</span>
+            <span class="service-pill">Propane</span>
+            <span class="service-pill">Lubricants</span>
+            <span class="service-pill">Site Reporting</span>
+          </div>
+        </div>
+        <div class="hero-aside">
+          <div class="brand-totem" aria-hidden="true">
+            <div class="brand-mark">GASCO</div>
+            <div class="brand-caption">Fuel, Propane, Lubricants</div>
+          </div>
+          <div id="user-pill" class="user-pill">
+            <span id="user-label"></span>
+            <button id="logout-button" class="secondary">Sign Out</button>
+          </div>
+        </div>
       </div>
     </section>
 
     <section id="auth-view" class="panel auth-wrap">
       <div class="auth-grid">
-        <h2>Admin Sign In</h2>
-        <p class="subhead">Use your Synchro credentials to manage endpoints and review uploaded operational files.</p>
+        <div class="section-kicker">Secure Operator Access</div>
+        <h2>Enter The Network Console</h2>
+        <p class="subhead">Sign in with your Synchro account to manage GASCO stations, review report traffic, and control who can access each site.</p>
         <label>
           Username
           <input id="login-username" autocomplete="username">
@@ -33,7 +56,7 @@
           <input id="login-password" type="password" autocomplete="current-password">
         </label>
         <div class="toolbar-row">
-          <button id="login-button" class="primary">Sign In</button>
+          <button id="login-button" class="primary">Open Console</button>
         </div>
         <div id="auth-status" class="status"></div>
       </div>
@@ -42,193 +65,215 @@
     <section id="app-view" class="hidden app-layout">
       <aside class="side-nav panel">
         <div class="side-nav-head">
-          <h2>CONSOLE:</h2>
-          <button id="refresh-button" class="secondary">Refresh</button>
+          <div class="section-kicker">Operations Rail</div>
+          <h2>Site Control</h2>
+          <p class="side-note">Manage endpoint routing, crew access, and dispatch settings for the full GASCO station network.</p>
+          <button id="refresh-button" class="secondary">Refresh Network Data</button>
         </div>
         <nav class="side-tabs">
-          <button id="tab-keys" class="tab active">Endpoints</button>
-          <button id="tab-users" class="tab hidden">Users</button>
-          <button id="tab-settings" class="tab hidden">Settings</button>
+          <button id="tab-keys" class="tab active">Sites</button>
+          <button id="tab-users" class="tab hidden">Crew Access</button>
+          <button id="tab-settings" class="tab hidden">Dispatch</button>
         </nav>
-        <div id="app-status" class="status"></div>
+        <div class="status-band">
+          <div class="status-label">System status</div>
+          <div id="app-status" class="status"></div>
+        </div>
       </aside>
+
       <div class="app-main">
-        <section id="keys-view" class="panel">    
-          <div class="panel">
-            <div class="toolbar">
-              <div class="tabs">
-                <button id="tab-keys" class="tab active">Endpoints</button>
-                <button id="tab-users" class="tab hidden">Users</button>
-                <button id="tab-settings" class="tab hidden">Settings</button>
-              </div>
-              <!--<div class="toolbar-row">
-                <button id="refresh-button" class="secondary">Refresh</button>
-              </div>-->
+        <section id="keys-view" class="panel">
+          <div class="section-header">
+            <div>
+              <div class="section-kicker">Retail Fuel Sites</div>
+              <h2>Endpoints And Report Streams</h2>
+              <p class="subhead">Provision station endpoints, assign their payment system, and keep fuel-report traffic flowing from the field into Synchro.</p>
             </div>
-            <!--<div id="app-status" class="status"></div>-->
+            <div class="section-chiprow" aria-hidden="true">
+              <span class="section-chip">Gilbarco</span>
+              <span class="section-chip">Verifone</span>
+              <span class="section-chip">Uploads</span>
+            </div>
           </div>
-            <div id="key-create-panel" class="form-grid hidden">
-              <label>
-                Endpoint Name
-                <input id="key-name" placeholder="warehouse-laptop">
-              </label>
-              <label>
-                Payment System
-                <select id="key-payment-system">
-                  <option value="gilbarco_passport">Gilbarco Passport</option>
-                  <option value="verifone_commander">Verifone Commander</option>
-                </select>
-              </label>
-              <div class="toolbar-row" style="align-self:end;">
-                <button id="create-key-button" class="primary">Create Endpoint Key</button>
-              </div>
+
+          <div id="key-create-panel" class="form-grid hidden">
+            <label>
+              Site / Endpoint Name
+              <input id="key-name" placeholder="island-city-site-01">
+            </label>
+            <label>
+              Payment System
+              <select id="key-payment-system">
+                <option value="gilbarco_passport">Gilbarco Passport</option>
+                <option value="verifone_commander">Verifone Commander</option>
+              </select>
+            </label>
+            <div class="toolbar-row action-align-end">
+              <button id="create-key-button" class="primary">Create Site Key</button>
             </div>
-            <div class="panel-body">
-              <div id="key-list" class="grid"></div>
+          </div>
+
+          <div class="panel-body">
+            <div id="key-list" class="grid"></div>
+          </div>
+        </section>
+
+        <section id="users-view" class="panel hidden">
+          <div class="section-header">
+            <div>
+              <div class="section-kicker">Crew Management</div>
+              <h2>Access And Operator Roles</h2>
+              <p class="subhead">Control who can administer the network, who can review station data, and which sites each viewer can inspect.</p>
             </div>
-          </section>
-          
-          <section id="users-view" class="panel hidden">
+          </div>
+
+          <div class="form-grid">
+            <label>
+              Username
+              <input id="new-username" placeholder="dispatch-lead">
+            </label>
+            <label>
+              Password
+              <input id="new-password" type="password" placeholder="Choose a password">
+            </label>
+            <label>
+              Access Level
+              <select id="new-role">
+                <option value="api_manager">API Manager</option>
+                <option value="viewer">Viewer</option>
+              </select>
+            </label>
+            <label id="scope-field">
+              Viewer Site Access
+              <div id="endpoint-scope-list" class="checkbox-list"></div>
+              <div class="hint">Viewers need at least one site. Managers automatically see the full network and can edit endpoint keys.</div>
+            </label>
+            <div class="toolbar-row action-align-end">
+              <button id="create-user-button" class="primary">Create Operator</button>
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <div id="user-list" class="grid"></div>
+          </div>
+        </section>
+
+        <section id="settings-view" class="panel hidden">
+          <div class="section-header">
+            <div>
+              <div class="section-kicker">Dispatch Settings</div>
+              <h2>Report Digest Delivery</h2>
+              <p class="subhead">Configure when the GASCO reporting digest goes out and who receives test or scheduled dispatch mail.</p>
+            </div>
+          </div>
+
+          <div class="panel-body">
             <div class="form-grid">
               <label>
-                Username
-                <input id="new-username" placeholder="alex">
+                Microsoft 365 Sender Account
+                <input id="setting-o365-sender" value="auditor@eternalhotels.com" readonly>
               </label>
               <label>
-                Password
-                <input id="new-password" type="password" placeholder="Choose a password">
+                Daily Digest Time
+                <input id="setting-digest-time" type="time" value="07:00">
               </label>
-              <label>
-                Access Level
-                <select id="new-role">
-                  <option value="api_manager">API Manager</option>
-                  <option value="viewer">Viewer</option>
-                </select>
+              <label class="label-wide">
+                <span class="inline-toggle">
+                  <input id="setting-digest-enabled" type="checkbox">
+                  Enable daily report dispatch
+                </span>
               </label>
-              <label id="scope-field">
-                Viewer Endpoint Access
-                <div id="endpoint-scope-list" class="checkbox-list"></div>
-                <div class="hint">Viewers need at least one endpoint. Managers automatically see all endpoints and can edit keys.</div>
+              <label class="label-wide">
+                Recipient Emails
+                <textarea id="setting-recipient-emails" rows="6" placeholder="one email per line or comma-separated"></textarea>
               </label>
-              <div class="toolbar-row" style="align-self:end;">
-                <button id="create-user-button" class="primary">Create User</button>
-              </div>
             </div>
-            <div class="panel-body">
-              <div id="user-list" class="grid"></div>
-            </div>
-          </section>
-          
-          <section id ="settings-view" class="panel hidden">
-              <div class="panel-body">
-                <h2>Settings</h2>
-                <p class="subhead">Configure automated report digest delivery.</p>
-                <div class="form-grid">
-                  <label>
-                    Office 365 Sender Account
-                    <input id="setting-o365-sender" value="auditor@eternalhotels.com" readonly>
-                  </label>
-                  <label>
-                      Daily Digest Time
-                      <input id="setting-digest-time" type="time" value="07:00">
-                  </label>
-                  <label class="label-wide">
-                    <span class="inline-toggle">
-                      <input id="setting-digest-enabled" type="checkbox">
-                      Enable daily report digest
-                    </span>
-                  </label>
-                  <label class="label-wide">
-                      Recipient Emails
-                      <textarea id="setting-recipient-emails" rows="6" placeholder="one email per line or comma-separated"></textarea>
-                  </label>
-                </div>
 
-                <div class="toolbar-row">
-                  <button id="save-settings-button" class="primary">Save Settings</button>
-                  <button id="test-digest-button" class="secondary">Send Test Digest Now</button>
-                </div>
-              <div id="settings-status" class="status"></div>
-            </div>
-          </section>
-        </section>
-      </main>
-
-      <div id="explorer-modal" class="explorer-modal" aria-hidden="true">
-        <div class="explorer-shell">
-          <div class="explorer-head">
-            <div>
-              <h2 id="explorer-title">Endpoint Explorer</h2>
-              <p id="explorer-subtitle" class="subhead">Browse folders and download files.</p>
-            </div>
-            <button id="explorer-close" class="secondary">Close</button>
-          </div>
-          <div class="explorer-tools">
-            <button id="explorer-up" class="secondary">Up One Level</button>
-            <div id="explorer-crumbs" class="crumbs"></div>
-          </div>
-          <div class="explorer-body">
-            <div id="explorer-status" class="status"></div>
-            <div id="explorer-list" class="explorer-list"></div>
-          </div>
-        </div>
-      </div>
-
-      <div id="report-modal" class="explorer-modal" aria-hidden="true">
-        <div class="explorer-shell report-shell">
-          <div class="explorer-head">
-            <div>
-              <h2 id="report-title">Parsed Report</h2>
-              <p id="report-subtitle" class="subhead">Review parsed report tables without downloading the raw source file.</p>
-            </div>
-            <button id="report-close" class="secondary">Close</button>
-          </div>
-          <div class="explorer-tools">
             <div class="toolbar-row">
-              <button id="report-download-json" class="secondary">Download JSON</button>
-              <button id="report-download-csv" class="secondary">Download CSV</button>
-              <button id="report-email-csv" class="secondary">Email CSV</button>
+              <button id="save-settings-button" class="primary">Save Dispatch Settings</button>
+              <button id="test-digest-button" class="secondary">Send Test Digest</button>
             </div>
+            <div id="settings-status" class="status"></div>
           </div>
-          <div class="explorer-body">
-            <div id="report-status" class="status"></div>
-            <div id="report-body" class="report-body"></div>
-          </div>
-        </div>
+        </section>
       </div>
+    </section>
 
-      <div id="monthly-modal" class="explorer-modal" aria-hidden="true">
-        <div class="explorer-shell monthly-shell">
-          <div class="explorer-head">
-            <div>
-              <h2 id="monthly-title">Monthly Reports</h2>
-              <p id="monthly-subtitle" class="subhead">Choose a detected month to build a combined endpoint report.</p>
-            </div>
-            <button id="monthly-close" class="secondary">Close</button>
+    <div id="explorer-modal" class="explorer-modal" aria-hidden="true">
+      <div class="explorer-shell">
+        <div class="explorer-head">
+          <div>
+            <h2 id="explorer-title">Station Report Explorer</h2>
+            <p id="explorer-subtitle" class="subhead">Browse folders, review uploads, and pull files from a GASCO site.</p>
           </div>
-          <div class="explorer-body">
-            <div id="monthly-status" class="status"></div>
-            <div id="monthly-list" class="monthly-list"></div>
-          </div>
+          <button id="explorer-close" class="secondary">Close</button>
+        </div>
+        <div class="explorer-tools">
+          <button id="explorer-up" class="secondary">Up One Level</button>
+          <div id="explorer-crumbs" class="crumbs"></div>
+        </div>
+        <div class="explorer-body">
+          <div id="explorer-status" class="status"></div>
+          <div id="explorer-list" class="explorer-list"></div>
         </div>
       </div>
+    </div>
 
-      <div id="endpoint-info-modal" class="explorer-modal" aria-hidden="true">
-        <div class="explorer-shell endpoint-info-shell">
-          <div class="explorer-head">
-            <div>
-              <h2 id="endpoint-info-title">Endpoint Info</h2>
-              <p id="endpoint-info-subtitle" class="subhead">Review endpoint details and tools without crowding the overview.</p>
-            </div>
-            <button id="endpoint-info-close" class="secondary">Close</button>
+    <div id="report-modal" class="explorer-modal" aria-hidden="true">
+      <div class="explorer-shell report-shell">
+        <div class="explorer-head">
+          <div>
+            <h2 id="report-title">Parsed Station Report</h2>
+            <p id="report-subtitle" class="subhead">Review parsed tables before exporting or routing a station report onward.</p>
           </div>
-          <div class="explorer-body">
-            <div id="endpoint-info-status" class="status"></div>
-            <div id="endpoint-info-body" class="report-body"></div>
+          <button id="report-close" class="secondary">Close</button>
+        </div>
+        <div class="explorer-tools">
+          <div class="toolbar-row">
+            <button id="report-download-json" class="secondary">Download JSON</button>
+            <button id="report-download-csv" class="secondary">Download CSV</button>
+            <button id="report-email-csv" class="secondary">Email CSV</button>
           </div>
         </div>
+        <div class="explorer-body">
+          <div id="report-status" class="status"></div>
+          <div id="report-body" class="report-body"></div>
+        </div>
       </div>
-  </section>
+    </div>
+
+    <div id="monthly-modal" class="explorer-modal" aria-hidden="true">
+      <div class="explorer-shell monthly-shell">
+        <div class="explorer-head">
+          <div>
+            <h2 id="monthly-title">Monthly Station Reports</h2>
+            <p id="monthly-subtitle" class="subhead">Choose a month to assemble a combined retail-fuel report for the selected site.</p>
+          </div>
+          <button id="monthly-close" class="secondary">Close</button>
+        </div>
+        <div class="explorer-body">
+          <div id="monthly-status" class="status"></div>
+          <div id="monthly-list" class="monthly-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="endpoint-info-modal" class="explorer-modal" aria-hidden="true">
+      <div class="explorer-shell endpoint-info-shell">
+        <div class="explorer-head">
+          <div>
+            <h2 id="endpoint-info-title">Site Profile</h2>
+            <p id="endpoint-info-subtitle" class="subhead">Review endpoint details, credentials, and report tools without leaving the overview.</p>
+          </div>
+          <button id="endpoint-info-close" class="secondary">Close</button>
+        </div>
+        <div class="explorer-body">
+          <div id="endpoint-info-status" class="status"></div>
+          <div id="endpoint-info-body" class="report-body"></div>
+        </div>
+      </div>
+    </div>
+  </main>
   <script src="app.js"></script>
 </body>
 </html>

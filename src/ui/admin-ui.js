@@ -17,6 +17,7 @@ const path = require("path");
 const panelPath = path.join(__dirname, "admin-panel.html");
 const cssPath = path.join(__dirname, "admin-panel.css");
 const clientPath = path.join(__dirname, "admin-client.js");
+const gascoLogoPath = path.join(__dirname, "gasco.png");
 
 // Read and return the HTML page (served at GET /).
 // fs.readFileSync reads the whole file into memory synchronously.
@@ -37,9 +38,15 @@ function renderAdminClient() {
   return fs.readFileSync(clientPath, "utf8");
 }
 
+// Read and return the local GASCO logo image (served at GET /gasco.png).
+function renderGascoLogo() {
+  return fs.readFileSync(gascoLogoPath);
+}
+
 // Export the three functions so ui.js can call them when the browser asks for assets.
 module.exports = {
   renderAdminPanel,
   renderAdminStylesheet,
-  renderAdminClient
+  renderAdminClient,
+  renderGascoLogo
 };
