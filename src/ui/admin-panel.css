@@ -150,7 +150,8 @@ body::before {
 }
 
 .hero-copy,
-.hero-aside {
+.hero-aside,
+.hero-login-stage {
   position: relative;
   z-index: 1;
 }
@@ -261,6 +262,29 @@ h2,
   justify-items: end;
 }
 
+.hero-login {
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  justify-items: stretch;
+  gap: 28px;
+  align-items: center;
+}
+
+.hero-copy-login {
+  align-content: center;
+}
+
+.hero-login .hero-copy-login .subhead {
+  max-width: 36rem;
+}
+
+.hero-login-stage {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 18px;
+  justify-items: center;
+  justify-self: end;
+}
+
 .brand-totem {
   width: min(100%, 300px);
   padding: 24px 22px 20px;
@@ -325,9 +349,45 @@ h2,
   padding: 32px;
 }
 
+.hero-login .auth-wrap {
+  width: min(100%, 560px);
+  margin: 0;
+}
+
 .auth-grid {
   display: grid;
   gap: 14px;
+}
+
+.hero-login .auth-grid h2,
+.hero-login .auth-grid .subhead,
+.auth-gate {
+  text-align: center;
+}
+
+.auth-gate {
+  width: min(100%, 560px);
+  display: grid;
+  gap: 14px;
+  padding: 28px;
+}
+
+.auth-gate .subhead {
+  max-width: 46ch;
+  margin: 0 auto;
+}
+
+.auth-gate-actions,
+.auth-submit-row {
+  justify-content: center;
+}
+
+.auth-gate-actions button {
+  min-width: min(100%, 320px);
+}
+
+.hero-login .service-strip {
+  justify-content: flex-start;
 }
 
 .section-kicker {
@@ -1025,6 +1085,20 @@ a {
   .hero,
   .app-layout {
     grid-template-columns: 1fr;
+
+  .hero-login {
+    justify-items: center;
+  }
+
+  .hero-copy-login,
+  .hero-aside-login {
+    justify-items: center;
+    text-align: center;
+  }
+
+  .hero-login .service-strip {
+    justify-content: center;
+  }
   }
 
   .hero-aside {
@@ -1033,6 +1107,12 @@ a {
 
   .brand-totem,
   .user-pill {
+    width: 100%;
+  }
+
+  .hero-login-stage,
+  .hero-login .auth-wrap,
+  .auth-gate {
     width: 100%;
   }
 
@@ -1080,6 +1160,11 @@ a {
   .user-pill {
     justify-content: space-between;
     border-radius: 18px;
+  }
+
+  .auth-gate-actions button,
+  .auth-submit-row button {
+    width: 100%;
   }
 
   .explorer-row,

@@ -15,8 +15,10 @@ const path = require("path");
 // Storing the paths in variables at module load time is slightly faster than
 // computing them on every request.
 const panelPath = path.join(__dirname, "admin-panel.html");
+const loginPanelPath = path.join(__dirname, "login-panel.html");
 const cssPath = path.join(__dirname, "admin-panel.css");
 const clientPath = path.join(__dirname, "admin-client.js");
+const loginClientPath = path.join(__dirname, "login-client.js");
 const gascoLogoPath = path.join(__dirname, "gasco.png");
 
 // Read and return the HTML page (served at GET /).
@@ -24,6 +26,11 @@ const gascoLogoPath = path.join(__dirname, "gasco.png");
 // "utf8" means "decode the bytes as UTF-8 text and return a string."
 function renderAdminPanel() {
   return fs.readFileSync(panelPath, "utf8");
+}
+
+// Read and return the dedicated login page (served at GET /login).
+function renderLoginPanel() {
+  return fs.readFileSync(loginPanelPath, "utf8");
 }
 
 // Read and return the stylesheet (served at GET /app.css).
@@ -38,6 +45,11 @@ function renderAdminClient() {
   return fs.readFileSync(clientPath, "utf8");
 }
 
+// Read and return the browser JavaScript for the dedicated login page.
+function renderLoginClient() {
+  return fs.readFileSync(loginClientPath, "utf8");
+}
+
 // Read and return the local GASCO logo image (served at GET /gasco.png).
 function renderGascoLogo() {
   return fs.readFileSync(gascoLogoPath);
@@ -46,7 +58,9 @@ function renderGascoLogo() {
 // Export the three functions so ui.js can call them when the browser asks for assets.
 module.exports = {
   renderAdminPanel,
+  renderLoginPanel,
   renderAdminStylesheet,
   renderAdminClient,
+  renderLoginClient,
   renderGascoLogo
 };

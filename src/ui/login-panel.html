@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GASCO Station Command Login</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body data-page="login">
+  <main class="shell">
+    <section class="masthead panel">
+      <div class="masthead-bar">
+        <div class="masthead-contact">info@gascofuel.com</div>
+        <div class="masthead-logo" aria-label="GasCo Fuel">
+          <img src="/gasco.png" alt="GasCo Fuel logo">
+        </div>
+        <div class="masthead-region">Washington | Oregon | Idaho Retail Fuel Network</div>
+      </div>
+      <div class="hero hero-login">
+        <div class="hero-copy hero-copy-login">
+          <div class="eyebrow">GasCo Fuel | Station Operations Network</div>
+          <h1>GASCO Station Command</h1>
+          <p class="subhead">Protected access for approved GASCO operators managing site uploads, dispatch settings, and retail fuel reporting.</p>
+          <div class="hero-banner">Authorized Access Only</div>
+          <div class="service-strip" aria-label="Managed service areas">
+            <span class="service-pill">Fuel</span>
+            <span class="service-pill">Propane</span>
+            <span class="service-pill">Lubricants</span>
+            <span class="service-pill">Site Reporting</span>
+          </div>
+        </div>
+        <div class="hero-login-stage">
+          <section id="auth-gate" class="panel auth-gate">
+            <div class="section-kicker">Protected Network Console</div>
+            <h2>Operator Verification</h2>
+            <p class="subhead">Proceed only if you are an authorized GASCO user with permission to access station operations data.</p>
+            <div class="toolbar-row auth-gate-actions">
+              <button id="authorized-user-button" class="primary">I Am An Authorized User</button>
+            </div>
+          </section>
+
+          <section id="auth-view" class="panel auth-wrap hidden">
+            <div class="auth-grid">
+              <div class="section-kicker">Secure Operator Access</div>
+              <h2>Enter The Network Console</h2>
+              <p class="subhead">Sign in with your Synchro account to manage GASCO stations, review report traffic, and control who can access each site.</p>
+              <label>
+                Username
+                <input id="login-username" autocomplete="username">
+              </label>
+              <label>
+                Password
+                <input id="login-password" type="password" autocomplete="current-password">
+              </label>
+              <div class="toolbar-row auth-submit-row">
+                <button id="login-button" class="primary">Open Console</button>
+              </div>
+              <div id="auth-status" class="status"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

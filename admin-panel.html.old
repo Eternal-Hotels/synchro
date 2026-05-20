@@ -6,7 +6,7 @@
   <title>GASCO Station Command</title>
   <link rel="stylesheet" href="app.css">
 </head>
-<body data-page="app">
+<body>
   <main class="shell">
     <section class="masthead panel">
       <div class="masthead-bar">
@@ -19,7 +19,8 @@
       <div class="hero">
         <div class="hero-copy">
           <div class="eyebrow">GasCo Fuel | Station Operations Network</div>
-          <h2><font color="white">GASCO Station Command</h2><font></h2>
+          <h1>GASCO Station Command</h1>
+          <p class="subhead">A unified operations room for GASCO fuel sites, report uploads, endpoint access, and daily dispatch across the retail network.</p>
           <div class="hero-banner">Increase Retail Fuel Sales</div>
           <div class="service-strip" aria-label="Managed service areas">
             <span class="service-pill">Fuel</span>
@@ -29,6 +30,10 @@
           </div>
         </div>
         <div class="hero-aside">
+          <div class="brand-totem" aria-hidden="true">
+            <div class="brand-mark">GASCO</div>
+            <div class="brand-caption">Fuel, Propane, Lubricants</div>
+          </div>
           <div id="user-pill" class="user-pill">
             <span id="user-label"></span>
             <button id="logout-button" class="secondary">Sign Out</button>
@@ -37,7 +42,25 @@
       </div>
     </section>
 
-
+    <section id="auth-view" class="panel auth-wrap">
+      <div class="auth-grid">
+        <div class="section-kicker">Secure Operator Access</div>
+        <h2>Enter The Network Console</h2>
+        <p class="subhead">Sign in with your Synchro account to manage GASCO stations, review report traffic, and control who can access each site.</p>
+        <label>
+          Username
+          <input id="login-username" autocomplete="username">
+        </label>
+        <label>
+          Password
+          <input id="login-password" type="password" autocomplete="current-password">
+        </label>
+        <div class="toolbar-row">
+          <button id="login-button" class="primary">Open Console</button>
+        </div>
+        <div id="auth-status" class="status"></div>
+      </div>
+    </section>
 
     <section id="app-view" class="hidden app-layout">
       <aside class="side-nav panel">

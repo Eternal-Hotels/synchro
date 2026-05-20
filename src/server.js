@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
     // The "await" keyword means we wait for the async function to finish before moving on.
 
     // First priority: serve the admin UI HTML/JS/CSS files.
-    if (await tryHandleUiRoute(req, res, pathname, adminUi)) {
+    if (await tryHandleUiRoute(req, res, pathname, adminUi, sessionManager)) {
       return;
     }
 

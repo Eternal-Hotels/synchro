@@ -92,12 +92,14 @@ const endpointInfoSubtitle = document.getElementById("endpoint-info-subtitle");
 const endpointInfoStatus = document.getElementById("endpoint-info-status");
 const endpointInfoBody = document.getElementById("endpoint-info-body");
 const endpointInfoCloseButton = document.getElementById("endpoint-info-close");
+const loginButton = document.getElementById("login-button");
 
 document.getElementById("save-settings-button").addEventListener("click", saveSettings);
 testDigestButton.addEventListener("click", sendTestDigest);
 
-
-document.getElementById("login-button").addEventListener("click", login);
+if (loginButton) {
+  loginButton.addEventListener("click", login);
+}
 document.getElementById("logout-button").addEventListener("click", logout);
 document.getElementById("refresh-button").addEventListener("click", refreshAll);
 document.getElementById("create-key-button").addEventListener("click", createKey);
@@ -214,14 +216,14 @@ async function bootstrap() {
   try {
     const { response, payload } = await fetchJson("/api/session/me");
     if (!response.ok) {
-      showLoggedOut();
+      redirectToLogin();
       return;
     }
     state.user = payload.user;
     showLoggedIn();
     await refreshAll();
   } catch {
-    showLoggedOut();
+    redirectToLogin();
   }
 }
 
@@ -254,22 +256,17 @@ async function logout() {
   state.user = null;
   state.keys = [];
   state.users = [];
-  showLoggedOut();
+  redirectToLogin();
 }
 
 function showLoggedOut() {
-  authView.classList.remove("hidden");
-  appView.classList.add("hidden");
-  userPill.style.display = "none";
-  closeExplorer();
-  closeReportViewer();
-  closeMonthlyViewer();
-  closeEndpointInfo();
-  setAppStatus("");
+  redirectToLogin();
 }
 
 function showLoggedIn() {
-  authView.classList.add("hidden");
+  if (authView) {
+    authView.classList.add("hidden");
+  }
   appView.classList.remove("hidden");
   userPill.style.display = "inline-flex";
   userLabel.textContent = state.user.username + " - " + friendlyRole(state.user.role);
@@ -2120,8 +2117,16 @@ function selectedScopes() {
 }
 
 function setAuthStatus(message, isError = false) {
+  if (!authStatus) {
+    return;
+  }
+
   authStatus.textContent = message;
   authStatus.style.color = isError ? "var(--danger)" : "var(--muted)";
+}
+
+function redirectToLogin() {
+  window.location.replace(appUrl("/login"));
 }
 
 function setAppStatus(message, isError = false) {
