@@ -38,6 +38,9 @@ const state = {
   }
 };
 
+const REPORT_JOB_POLL_INTERVAL_MS = 1000;
+const REPORT_JOB_TIMEOUT_MS = 15 * 60 * 1000;
+
 const authView = document.getElementById("auth-view");
 const appView = document.getElementById("app-view");
 const userPill = document.getElementById("user-pill");
@@ -210,6 +213,64 @@ async function fetchJson(path, options) {
   const response = await fetch(appUrl(path), options);
   const payload = await readJsonResponse(response, path);
   return { response, payload };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function buildAsyncJobPath(requestPath) {
+  return requestPath + (requestPath.includes("?") ? "&" : "?") + "async=1";
+}
+
+async function pollReportJob(jobId, options = {}) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < REPORT_JOB_TIMEOUT_MS) {
+    const { response, payload } = await fetchJson("/api/admin/report-jobs/" + encodeURIComponent(jobId));
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not load report job status.");
+    }
+
+    if (payload.status === "completed") {
+      return payload.result;
+    }
+
+    if (payload.status === "failed") {
+      throw new Error(payload.error || "Report processing failed.");
+    }
+
+    await delay(REPORT_JOB_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(
+    options.timeoutMessage
+    || "Report processing is still running in the background. Please try again in a moment."
+  );
+}
+
+async function fetchReportJobResult(requestPath, fetchOptions, options = {}) {
+  const { response, payload } = await fetchJson(buildAsyncJobPath(requestPath), fetchOptions);
+
+  if (response.status === 202) {
+    if (!payload.jobId) {
+      throw new Error("Report job did not return a job id.");
+    }
+
+    if (typeof options.setStatus === "function" && options.pendingMessage) {
+      options.setStatus(options.pendingMessage);
+    }
+
+    return pollReportJob(payload.jobId, options);
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || options.failureMessage || "Report processing failed.");
+  }
+
+  return payload;
 }
 
 async function bootstrap() {
@@ -701,22 +762,27 @@ async function buildManualReport() {
     return;
   }
 
+  const reportSlug = state.monthlyViewer.slug;
+
   try {
     setMonthlyStatus("Building report from " + selectedFiles.length + " PDF(s)...");
-    const { response, payload } = await fetchJson(
+    const payload = await fetchReportJobResult(
       "/api/admin/keys/" + encodeURIComponent(state.monthlyViewer.slug) + "/manual-report",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pdfFiles: selectedFiles })
+      },
+      {
+        setStatus: setMonthlyStatus,
+        pendingMessage: "Building the manual report in the background...",
+        failureMessage: "Could not build manual report.",
+        timeoutMessage: "The manual report is still building in the background. Please reopen it in a moment."
       }
     );
-    if (!response.ok) {
-      throw new Error(payload.error || "Could not build manual report.");
-    }
 
     closeMonthlyViewer();
-    state.reportViewer.slug = state.monthlyViewer.slug;
+    state.reportViewer.slug = reportSlug;
     state.reportViewer.path = "manual-" + Date.now();
     state.reportViewer.report = payload;
     reportModal.classList.add("open");
@@ -886,12 +952,16 @@ function renderMonthlyViewerManual() {
 async function loadMonthlyReport(slug, month, monthLabel) {
   try {
     setMonthlyStatus("Building " + monthLabel + " report...");
-    const { response, payload } = await fetchJson(
-      "/api/admin/keys/" + encodeURIComponent(slug) + "/monthly-report?month=" + encodeURIComponent(month)
+    const payload = await fetchReportJobResult(
+      "/api/admin/keys/" + encodeURIComponent(slug) + "/monthly-report?month=" + encodeURIComponent(month),
+      undefined,
+      {
+        setStatus: setMonthlyStatus,
+        pendingMessage: "Building the monthly report in the background...",
+        failureMessage: "Could not build monthly report.",
+        timeoutMessage: "The monthly report is still building in the background. Please reopen it in a moment."
+      }
     );
-    if (!response.ok) {
-      throw new Error(payload.error || "Could not build monthly report.");
-    }
 
     closeMonthlyViewer();
     state.reportViewer.slug = slug;
@@ -1134,10 +1204,17 @@ async function loadCurrentMonthReport(slug, name, paymentSystem) {
   setReportStatus("Building current month report...");
 
   try {
-    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/current-month-report");
-    if (!response.ok) {
-      throw new Error(payload.error || "Could not build current month report.");
-    }
+    const payload = await fetchReportJobResult(
+      "/api/admin/keys/" + encodeURIComponent(slug) + "/current-month-report",
+      undefined,
+      {
+        setStatus: setReportStatus,
+        pendingMessage: "Current month report is still building in the background...",
+        failureMessage: "Could not build current month report.",
+        timeoutMessage: "The current month report is still building in the background. Please reopen it in a moment."
+      }
+    );
+
     state.reportViewer.report = payload;
     reportTitle.textContent = payload.reportTitle || (name + " - Current Month Report");
     reportSubtitle.textContent = payload.periodLabel
@@ -1289,10 +1366,17 @@ async function loadParsedReport(slug, reportPath, reportName) {
   setReportStatus("Loading parsed report...");
 
   try {
-    const { response, payload } = await fetchJson("/api/admin/keys/" + encodeURIComponent(slug) + "/report?path=" + encodeURIComponent(reportPath));
-    if (!response.ok) {
-      throw new Error(payload.error || "Could not parse report.");
-    }
+    const payload = await fetchReportJobResult(
+      "/api/admin/keys/" + encodeURIComponent(slug) + "/report?path=" + encodeURIComponent(reportPath),
+      undefined,
+      {
+        setStatus: setReportStatus,
+        pendingMessage: "Report parsing is still running in the background...",
+        failureMessage: "Could not parse report.",
+        timeoutMessage: "The report is still parsing in the background. Please reopen it in a moment."
+      }
+    );
+
     state.reportViewer.report = payload;
     reportTitle.textContent = payload.reportTitle || reportName;
     reportSubtitle.textContent = reportPath;

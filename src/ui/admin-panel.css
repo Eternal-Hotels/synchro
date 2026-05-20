@@ -870,6 +870,7 @@ button.danger {
 
 .report-body {
   padding-bottom: 22px;
+  color: #111111;
 }
 
 .explorer-row,
@@ -973,6 +974,7 @@ button.danger {
 .report-meta-card,
 .report-section {
   padding: 16px;
+  color: #111111;
 }
 
 .report-meta-card strong,
@@ -1006,6 +1008,7 @@ button.danger {
   width: 100%;
   min-width: 480px;
   border-collapse: collapse;
+  color: #111111;
 }
 
 .report-table th,
@@ -1015,6 +1018,10 @@ button.danger {
   text-align: left;
   vertical-align: top;
   white-space: nowrap;
+}
+
+.report-table td {
+  color: #111111;
 }
 
 .report-table th {

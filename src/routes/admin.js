@@ -10,11 +10,56 @@ const { STORAGE_DIR } = require("../config");
 const { readJsonBody, sendJson } = require("../utils/http");
 const { listGilbarcoReportMonths, parseMonthlyGilbarcoReport, parseManualGilbarcoReport, listPdfFilesInEndpoint, parseReportFile, buildReportTree, parseCurrentMonthReport } = require("../services/report-parser");
 const { sendReportDigestTest, sendParsedCsvEmail } = require("../services/report-email-digest");
+const { getReportJob, runReportTask, startReportJob } = require("../services/report-task-service");
+
+function getReportJobOwnerKey(user) {
+  if (!user) {
+    return "";
+  }
+
+  if (user.id !== undefined && user.id !== null && user.id !== "") {
+    return `id:${String(user.id)}`;
+  }
+
+  if (user.username) {
+    return `username:${String(user.username)}`;
+  }
+
+  return "";
+}
+
+function wantsAsyncReportJob(req, requestUrl) {
+  const queryFlag = String(requestUrl.searchParams.get("async") || "").trim().toLowerCase();
+  if (queryFlag === "1" || queryFlag === "true" || queryFlag === "yes") {
+    return true;
+  }
+
+  const headerFlag = String(req.headers["x-synchro-async"] || "").trim().toLowerCase();
+  return headerFlag === "1" || headerFlag === "true" || headerFlag === "yes";
+}
+
+function sendAcceptedReportJob(res, ownerKey, label, taskName, taskArgs) {
+  sendJson(res, 202, startReportJob(ownerKey, label, taskName, taskArgs));
+}
 
 // This function handles all /api/admin/** routes.
 // Every route here requires a valid session cookie AND the appropriate permission.
 // Returns true if a route matched, false if nothing matched (so server.js can try next).
 async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManager, storage, uploadService) {
+
+  const reportJobMatch = pathname.match(/^\/api\/admin\/report-jobs\/([^/]+)$/);
+  if (req.method === "GET" && reportJobMatch) {
+    const session = await sessionManager.requireSession(req);
+    const job = getReportJob(reportJobMatch[1], getReportJobOwnerKey(session.user));
+
+    if (!job) {
+      sendJson(res, 404, { error: "Report job not found." });
+      return true;
+    }
+
+    sendJson(res, 200, job);
+    return true;
+  }
 
   // -----------------------------------------------------------------------
   // GET /api/admin/keys — list all endpoints the signed-in user can see
@@ -210,7 +255,18 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     }
 
     try {
-      sendJson(res, 200, parseReportFile(fileInfo.fullPath));
+      if (wantsAsyncReportJob(req, requestUrl)) {
+        sendAcceptedReportJob(
+          res,
+          getReportJobOwnerKey(session.user),
+          "parsed report",
+          "parseReportFile",
+          { filePath: fileInfo.fullPath }
+        );
+        return true;
+      }
+
+      sendJson(res, 200, await runReportTask("parseReportFile", { filePath: fileInfo.fullPath }));
     } catch (error) {
       sendJson(res, 400, { error: error.message || "Could not parse report." });
     }
@@ -266,11 +322,24 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
       || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     try {
-      sendJson(res, 200, parseCurrentMonthReport(
-        path.join(STORAGE_DIR, currentMonthMatch[1]),
-        keyRecord.paymentSystem,
-        currentMonth
-      ));
+      const taskArgs = {
+        rootPath: path.join(STORAGE_DIR, currentMonthMatch[1]),
+        paymentSystem: keyRecord.paymentSystem,
+        monthKey: currentMonth
+      };
+
+      if (wantsAsyncReportJob(req, requestUrl)) {
+        sendAcceptedReportJob(
+          res,
+          getReportJobOwnerKey(session.user),
+          "current month report",
+          "parseCurrentMonthReport",
+          taskArgs
+        );
+        return true;
+      }
+
+      sendJson(res, 200, await runReportTask("parseCurrentMonthReport", taskArgs));
     } catch (error) {
       sendJson(res, 400, { error: error.message || "Could not build current month report." });
     }
@@ -326,10 +395,23 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     }
 
     try {
-      sendJson(res, 200, parseMonthlyGilbarcoReport(
-        path.join(STORAGE_DIR, monthlyReportMatch[1]),
-        requestUrl.searchParams.get("month") || ""
-      ));
+      const taskArgs = {
+        rootPath: path.join(STORAGE_DIR, monthlyReportMatch[1]),
+        monthKey: requestUrl.searchParams.get("month") || ""
+      };
+
+      if (wantsAsyncReportJob(req, requestUrl)) {
+        sendAcceptedReportJob(
+          res,
+          getReportJobOwnerKey(session.user),
+          "monthly report",
+          "parseMonthlyGilbarcoReport",
+          taskArgs
+        );
+        return true;
+      }
+
+      sendJson(res, 200, await runReportTask("parseMonthlyGilbarcoReport", taskArgs));
     } catch (error) {
       sendJson(res, 400, { error: error.message || "Could not build monthly report." });
     }
@@ -390,10 +472,23 @@ async function tryHandleAdminRoute(req, res, pathname, requestUrl, sessionManage
     }
 
     try {
-      sendJson(res, 200, parseManualGilbarcoReport(
-        path.join(STORAGE_DIR, manualReportMatch[1]),
-        selectedFiles
-      ));
+      const taskArgs = {
+        rootPath: path.join(STORAGE_DIR, manualReportMatch[1]),
+        pdfFilenames: selectedFiles
+      };
+
+      if (wantsAsyncReportJob(req, requestUrl)) {
+        sendAcceptedReportJob(
+          res,
+          getReportJobOwnerKey(session.user),
+          "manual report",
+          "parseManualGilbarcoReport",
+          taskArgs
+        );
+        return true;
+      }
+
+      sendJson(res, 200, await runReportTask("parseManualGilbarcoReport", taskArgs));
     } catch (error) {
       sendJson(res, 400, { error: error.message || "Could not build manual report." });
     }
