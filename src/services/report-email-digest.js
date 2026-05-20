@@ -730,7 +730,18 @@ function buildVerifoneCsv(report) {
   const summarySections = report.sections.filter((s) =>
     matchesHeaders(s.headers, ["Category", "Count", "Amount"])
   );
-  const dispenserRows = collectVerifoneDispenserRows(report.sections);
+  const fuelTotalsSection = report.sections.find((s) =>
+    matchesHeaders(s.headers, ["Product", "# of Sales", "Volume", "Amount"])
+  );
+  const dispenserRows = fuelTotalsSection
+    ? fuelTotalsSection.rows.map((row) => ({
+        Position: "Product Totals",
+        Product: row.Product || "",
+        "# of Sales": row["# of Sales"] || "",
+        Volume: row.Volume || "",
+        Amount: row.Amount || ""
+      }))
+    : collectVerifoneDispenserRows(report.sections);
 
   if (!departmentSection && !pluSection && !summarySections.length && !dispenserRows.length) {
     return "";

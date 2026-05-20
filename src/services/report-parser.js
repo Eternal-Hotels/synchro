@@ -501,7 +501,8 @@ function parseReportFile(filePath, options = {}) {
     return parsePdfReportFile(filePath);
   }
   if (extension === ".html" || extension === ".htm") {
-    return parseHtmlReportFile(filePath, options);
+    const htmlReport = parseHtmlReportFile(filePath, options);
+    return normalizeStandaloneVerifoneReport(htmlReport);
   }
   throw new Error(`Unsupported report type: ${extension || "unknown"}`);
 }
@@ -666,58 +667,60 @@ function scoreBundledVerifoneFilename(filename) {
 
 function collectBundledVerifoneSections(report) {
   const sections = [];
-  const sectionSpecs = [
-    {
-      title: "Department",
-      headers: [
-        "Dept#",
-        "Description",
-        "Cust#",
-        "Items",
-        "% of Sales",
-        "Gross",
-        "Refunds",
-        "Discounts",
-        "Net Sales"
-      ]
-    },
-    {
-      title: "Summary",
-      headers: [
-        "Category",
-        "Count",
-        "Amount"
-      ]
-    },
-    {
-      title: "PLU",
-      headers: [
-        "PLU Number",
-        "Description",
-        "Price",
-        "Cust",
-        "Items",
-        "Tot Sales",
-        "%Sales",
-        "Reason Code",
-        "Promotion ID"
-      ]
-    }
-  ];
 
-  for (const spec of sectionSpecs) {
-    const match = findSectionByHeaders(report.sections, spec.headers);
-    if (match) {
-      sections.push({
-        ...match,
-        title: spec.title
-      });
-    }
+  const departmentSection = findSectionByHeaders(report.sections, [
+    "Dept#",
+    "Description",
+    "Cust#",
+    "Items",
+    "% of Sales",
+    "Gross",
+    "Refunds",
+    "Discounts",
+    "Net Sales"
+  ]);
+  const fuelTotalsSection = buildVerifoneFuelTotalsSection(report.sections);
+  const dispenserSection = buildVerifoneDispenserSection(report.sections);
+  const summarySection = findSectionByHeaders(report.sections, [
+    "Category",
+    "Count",
+    "Amount"
+  ]);
+  const pluSection = findSectionByHeaders(report.sections, [
+    "PLU Number",
+    "Description",
+    "Price",
+    "Cust",
+    "Items",
+    "Tot Sales",
+    "%Sales",
+    "Reason Code",
+    "Promotion ID"
+  ]);
+
+  if (departmentSection) {
+    sections.push({
+      ...departmentSection,
+      title: "Department"
+    });
   }
-
-  const dispenserSection = buildBundledVerifoneDispenserSection(report.sections);
+  if (fuelTotalsSection) {
+    sections.push(fuelTotalsSection);
+  }
   if (dispenserSection) {
-    sections.splice(Math.min(1, sections.length), 0, dispenserSection);
+    sections.push(dispenserSection);
+  }
+  if (summarySection) {
+    sections.push({
+      ...summarySection,
+      title: "Summary"
+    });
+  }
+  if (pluSection) {
+    sections.push({
+      ...pluSection,
+      title: "PLU"
+    });
   }
 
   if (sections.length) {
@@ -744,54 +747,8 @@ function buildVerifoneDirectoryReportTitle(directoryPath, bundledReport) {
   return `${path.basename(directoryPath)} Verifone Reports`;
 }
 
-function buildBundledVerifoneDispenserSection(sections) {
-  const startIndex = sections.findIndex((section) => (
-    section.headers.length === 5
-      && normalizeLabel(section.headers[0]) === "product"
-      && normalizeLabel(section.headers[1]) === "# of sales"
-      && normalizeLabel(section.headers[2]) === "volume"
-      && normalizeLabel(section.headers[3]) === "amount"
-      && /^fueling position \d+$/i.test(String(section.headers[4] || ""))
-  ));
-
-  if (startIndex === -1) {
-    return null;
-  }
-
-  const rows = [];
-  for (let index = startIndex; index < sections.length; index += 1) {
-    const section = sections[index];
-    const title = String(section.title || "").trim();
-
-    if (index === startIndex) {
-      const positionLabel = String(section.headers[4] || "").trim() || "Fueling Position 1";
-      section.rows.forEach((row) => {
-        rows.push({
-          Position: positionLabel,
-          Product: row.Product || "",
-          "# of Sales": row["# of Sales"] || "",
-          Volume: row.Volume || "",
-          Amount: row.Amount || ""
-        });
-      });
-      continue;
-    }
-
-    if (!/^fueling position \d+$/i.test(title) && !/^product totals$/i.test(title)) {
-      break;
-    }
-
-    section.rows.forEach((row) => {
-      rows.push({
-        Position: title,
-        Product: row.Col1 || "",
-        "# of Sales": row.Col2 || "",
-        Volume: row.Col3 || "",
-        Amount: row.Col4 || ""
-      });
-    });
-  }
-
+function buildVerifoneDispenserSection(sections) {
+  const rows = collectVerifoneDispenserRows(sections, { includeProductTotals: false });
   if (!rows.length) {
     return null;
   }
@@ -802,6 +759,230 @@ function buildBundledVerifoneDispenserSection(sections) {
     rows,
     totalRows: rows.length,
     truncated: false
+  };
+}
+
+function buildVerifoneFuelTotalsSection(sections) {
+  const existingSection = sections.find((section) => (
+    /^fuel totals$/i.test(String(section.title || "").trim())
+      && matchesHeaders(section.headers, ["Product", "# of Sales", "Volume", "Amount"])
+  ));
+  if (existingSection) {
+    return {
+      title: "Fuel Totals",
+      headers: ["Product", "# of Sales", "Volume", "Amount"],
+      rows: existingSection.rows.map((row) => ({
+        Product: row.Product || "",
+        "# of Sales": row["# of Sales"] || "",
+        Volume: row.Volume || "",
+        Amount: row.Amount || ""
+      })),
+      totalRows: existingSection.totalRows,
+      truncated: Boolean(existingSection.truncated)
+    };
+  }
+
+  const productTotalsSection = sections.find((section) => (
+    /^product totals$/i.test(String(section.title || "").trim())
+      && matchesHeaders(section.headers, ["Col1", "Col2", "Col3", "Col4"])
+  ));
+  if (productTotalsSection) {
+    const rows = productTotalsSection.rows
+      .map((row) => ({
+        Product: row.Col1 || row.Product || "",
+        "# of Sales": row.Col2 || row["# of Sales"] || "",
+        Volume: row.Col3 || row.Volume || "",
+        Amount: row.Col4 || row.Amount || ""
+      }))
+      .filter((row) => row.Product || row["# of Sales"] || row.Volume || row.Amount);
+
+    if (rows.length) {
+      return {
+        title: "Fuel Totals",
+        headers: ["Product", "# of Sales", "Volume", "Amount"],
+        rows,
+        totalRows: rows.length,
+        truncated: Boolean(productTotalsSection.truncated)
+      };
+    }
+  }
+
+  const dispenserRows = collectVerifoneDispenserRows(sections, { includeProductTotals: false });
+  if (!dispenserRows.length) {
+    return null;
+  }
+
+  const totals = new Map();
+  dispenserRows.forEach((row) => {
+    const product = String(row.Product || "").trim();
+    if (!product) {
+      return;
+    }
+
+    const aggregate = getOrCreateAggregate(totals, product, () => ({
+      Product: product,
+      "# of Sales": 0,
+      Volume: 0,
+      Amount: 0
+    }));
+
+    aggregate["# of Sales"] += parseIntegerValue(row["# of Sales"]);
+    aggregate.Volume += parseNumber(row.Volume);
+    aggregate.Amount += parseCurrencyValue(row.Amount);
+  });
+
+  const rows = Array.from(totals.values())
+    .sort((left, right) => compareVerifoneFuelProducts(left.Product, right.Product))
+    .map((row) => ({
+      Product: row.Product,
+      "# of Sales": formatInteger(row["# of Sales"]),
+      Volume: formatVolume(row.Volume),
+      Amount: formatCurrency(row.Amount)
+    }));
+
+  if (!rows.length) {
+    return null;
+  }
+
+  return {
+    title: "Fuel Totals",
+    headers: ["Product", "# of Sales", "Volume", "Amount"],
+    rows,
+    totalRows: rows.length,
+    truncated: false
+  };
+}
+
+function collectVerifoneDispenserRows(sections, options = {}) {
+  const includeProductTotals = options.includeProductTotals !== false;
+  const normalizedSection = findSectionByHeaders(sections, ["Position", "Product", "# of Sales", "Volume", "Amount"]);
+  if (normalizedSection) {
+    return normalizedSection.rows
+      .map((row) => ({
+        Position: row.Position || "",
+        Product: row.Product || "",
+        "# of Sales": row["# of Sales"] || "",
+        Volume: row.Volume || "",
+        Amount: row.Amount || ""
+      }))
+      .filter((row) => includeProductTotals || normalizeLabel(row.Position) !== "product totals");
+  }
+
+  const startIndex = sections.findIndex((section) => (
+    matchesHeaders(section.headers, ["Product", "# of Sales", "Volume", "Amount", "Fueling Position 1"])
+  ));
+
+  if (startIndex === -1) {
+    return [];
+  }
+
+  const rows = [];
+  for (let index = startIndex; index < sections.length; index += 1) {
+    const section = sections[index];
+    const title = String(section.title || "").trim();
+
+    if (index === startIndex) {
+      const positionLabel = String(section.headers[4] || "").trim() || "Fueling Position 1";
+      section.rows.forEach((row) => {
+        const product = row.Product || "";
+        const salesCount = row["# of Sales"] || "";
+        const volume = row.Volume || "";
+        const amount = row.Amount || "";
+        if (!product && !salesCount && !volume && !amount) {
+          return;
+        }
+        rows.push({
+          Position: positionLabel,
+          Product: product,
+          "# of Sales": salesCount,
+          Volume: volume,
+          Amount: amount
+        });
+      });
+      continue;
+    }
+
+    if (!/^fueling position \d+$/i.test(title) && !/^product totals$/i.test(title)) {
+      break;
+    }
+
+    if (!includeProductTotals && /^product totals$/i.test(title)) {
+      continue;
+    }
+
+    section.rows.forEach((row) => {
+      const product = row.Col1 || row.Product || "";
+      const salesCount = row.Col2 || row["# of Sales"] || "";
+      const volume = row.Col3 || row.Volume || "";
+      const amount = row.Col4 || row.Amount || "";
+      if (!product && !salesCount && !volume && !amount) {
+        return;
+      }
+      rows.push({
+        Position: title,
+        Product: product,
+        "# of Sales": salesCount,
+        Volume: volume,
+        Amount: amount
+      });
+    });
+  }
+
+  return rows;
+}
+
+function compareVerifoneFuelProducts(left, right) {
+  const normalizedLeft = normalizeLabel(left);
+  const normalizedRight = normalizeLabel(right);
+
+  if (normalizedLeft === "overall total") {
+    return normalizedRight === "overall total" ? 0 : 1;
+  }
+  if (normalizedRight === "overall total") {
+    return -1;
+  }
+
+  return String(left || "").localeCompare(String(right || ""));
+}
+
+function isLikelyVerifoneReport(sections) {
+  return Boolean(
+    findSectionByHeaders(sections, [
+      "Dept#",
+      "Description",
+      "Cust#",
+      "Items",
+      "% of Sales",
+      "Gross",
+      "Refunds",
+      "Discounts",
+      "Net Sales"
+    ])
+    || findSectionByHeaders(sections, [
+      "PLU Number",
+      "Description",
+      "Price",
+      "Cust",
+      "Items",
+      "Tot Sales",
+      "%Sales",
+      "Reason Code",
+      "Promotion ID"
+    ])
+    || findSectionByHeaders(sections, ["Product", "# of Sales", "Volume", "Amount", "Fueling Position 1"])
+    || sections.some((section) => /^product totals$/i.test(String(section.title || "").trim()))
+  );
+}
+
+function normalizeStandaloneVerifoneReport(report) {
+  if (!isLikelyVerifoneReport(report.sections)) {
+    return report;
+  }
+
+  return {
+    ...report,
+    reportType: "verifone_report_bundle",
+    sections: collectBundledVerifoneSections(report)
   };
 }
 
@@ -1575,6 +1756,7 @@ function combineVerifoneReports(parsedReports, titleOverride, labelOverride, opt
   }
 
   const departmentTotals = new Map();
+  const fuelTotals = new Map();
   const pluTotals = new Map();
   const summaryTotals = new Map();
   const dispenserTotals = new Map();
@@ -1609,6 +1791,22 @@ function combineVerifoneReports(parsedReports, titleOverride, labelOverride, opt
           aggregate.Refunds += parseCurrencyValue(row.Refunds);
           aggregate.Discounts += parseCurrencyValue(row.Discounts);
           aggregate["Net Sales"] += parseCurrencyValue(row["Net Sales"]);
+        });
+      } else if (title === "fuel totals") {
+        rows.forEach((row) => {
+          const key = String(row.Product || "").trim();
+          if (!key) {
+            return;
+          }
+          const aggregate = getOrCreateAggregate(fuelTotals, key, () => ({
+            Product: row.Product || "",
+            "# of Sales": 0,
+            Volume: 0,
+            Amount: 0
+          }));
+          aggregate["# of Sales"] += parseIntegerValue(row["# of Sales"]);
+          aggregate.Volume += parseNumber(row.Volume);
+          aggregate.Amount += parseCurrencyValue(row.Amount);
         });
       } else if (title === "plu") {
         rows.forEach((row) => {
@@ -1683,6 +1881,15 @@ function combineVerifoneReports(parsedReports, titleOverride, labelOverride, opt
       "Net Sales": formatCurrency(row["Net Sales"])
     }));
 
+  const fuelTotalRows = Array.from(fuelTotals.values())
+    .sort((left, right) => compareVerifoneFuelProducts(left.Product, right.Product))
+    .map((row) => ({
+      Product: row.Product,
+      "# of Sales": formatInteger(row["# of Sales"]),
+      Volume: formatVolume(row.Volume),
+      Amount: formatCurrency(row.Amount)
+    }));
+
   const pluRows = Array.from(pluTotals.values())
     .sort((left, right) => String(left["PLU Number"]).localeCompare(String(right["PLU Number"])))
     .map((row) => ({
@@ -1725,6 +1932,15 @@ function combineVerifoneReports(parsedReports, titleOverride, labelOverride, opt
       headers: ["Dept#", "Description", "Cust#", "Items", "% of Sales", "Gross", "Refunds", "Discounts", "Net Sales"],
       rows: departmentRows,
       totalRows: departmentRows.length,
+      truncated: false
+    });
+  }
+  if (fuelTotalRows.length) {
+    sections.push({
+      title: "Fuel Totals",
+      headers: ["Product", "# of Sales", "Volume", "Amount"],
+      rows: fuelTotalRows,
+      totalRows: fuelTotalRows.length,
       truncated: false
     });
   }

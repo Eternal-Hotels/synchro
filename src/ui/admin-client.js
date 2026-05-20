@@ -1645,8 +1645,9 @@ function buildVerifoneCombinedCsv(report) {
     "Reason Code",
     "Promotion ID"
   ]));
+  const fuelRows = collectVerifoneFuelRows(report.sections);
 
-  if (!departmentSection && !pluSection) {
+  if (!departmentSection && !pluSection && !fuelRows.length) {
     return "";
   }
 
@@ -1664,9 +1665,40 @@ function buildVerifoneCombinedCsv(report) {
     "net sales",
     "price",
     "reason code",
-    "promotion id"
+    "promotion id",
+    "position",
+    "product",
+    "# of sales",
+    "volume",
+    "amount"
   ];
   const lines = [headers.map(escapeCsv).join(",")];
+
+  if (fuelRows.length) {
+    fuelRows.forEach((row) => {
+      lines.push([
+        "fuel",
+        "",
+        "",
+        row.Product || "",
+        row["# of Sales"] || "",
+        row.Volume || "",
+        "",
+        "",
+        "",
+        "",
+        row.Amount || "",
+        "",
+        "",
+        "",
+        row.Position || "",
+        row.Product || "",
+        row["# of Sales"] || "",
+        row.Volume || "",
+        row.Amount || ""
+      ].map(escapeCsv).join(","));
+    });
+  }
 
   if (departmentSection) {
     departmentSection.rows
@@ -1684,6 +1716,11 @@ function buildVerifoneCombinedCsv(report) {
           row.Refunds || "",
           row.Discounts || "",
           row["Net Sales"] || "",
+          "",
+          "",
+          "",
+          "",
+          "",
           "",
           "",
           ""
@@ -1707,12 +1744,130 @@ function buildVerifoneCombinedCsv(report) {
         row["Tot Sales"] || "",
         row.Price || "",
         row["Reason Code"] || "",
-        row["Promotion ID"] || ""
+          row["Promotion ID"] || "",
+          "",
+          "",
+          "",
+          "",
+          ""
       ].map(escapeCsv).join(","));
     });
   }
 
   return lines.join("\n") + "\n";
+}
+
+function collectVerifoneFuelRows(sections) {
+  const normalizedFuelTotalsSection = sections.find((section) => (
+    /^fuel totals$/i.test(String(section.title || "").trim())
+      && matchesHeaders(section.headers, ["Product", "# of Sales", "Volume", "Amount"])
+  ));
+  if (normalizedFuelTotalsSection) {
+    return normalizedFuelTotalsSection.rows
+      .map((row) => ({
+        Position: "Product Totals",
+        Product: row.Product || "",
+        "# of Sales": row["# of Sales"] || "",
+        Volume: row.Volume || "",
+        Amount: row.Amount || ""
+      }))
+      .filter((row) => row.Product || row["# of Sales"] || row.Volume || row.Amount);
+  }
+
+  const productTotalsSection = sections.find((section) => (
+    /^product totals$/i.test(String(section.title || "").trim())
+      && matchesHeaders(section.headers, ["Col1", "Col2", "Col3", "Col4"])
+  ));
+  if (productTotalsSection) {
+    return productTotalsSection.rows
+      .map((row) => ({
+        Position: "Product Totals",
+        Product: row.Col1 || row.Product || "",
+        "# of Sales": row.Col2 || row["# of Sales"] || "",
+        Volume: row.Col3 || row.Volume || "",
+        Amount: row.Col4 || row.Amount || ""
+      }))
+      .filter((row) => row.Product || row["# of Sales"] || row.Volume || row.Amount);
+  }
+
+  const normalizedSection = sections.find((section) => matchesHeaders(section.headers, [
+    "Position",
+    "Product",
+    "# of Sales",
+    "Volume",
+    "Amount"
+  ]));
+  if (normalizedSection) {
+    return normalizedSection.rows.map((row) => ({
+      Position: row.Position || "",
+      Product: row.Product || "",
+      "# of Sales": row["# of Sales"] || "",
+      Volume: row.Volume || "",
+      Amount: row.Amount || ""
+    }));
+  }
+
+  const startIndex = sections.findIndex((section) => matchesHeaders(section.headers, [
+    "Product",
+    "# of Sales",
+    "Volume",
+    "Amount",
+    "Fueling Position 1"
+  ]));
+
+  if (startIndex === -1) {
+    return [];
+  }
+
+  const rows = [];
+  for (let index = startIndex; index < sections.length; index += 1) {
+    const section = sections[index];
+    const title = String(section.title || "").trim();
+
+    if (index === startIndex) {
+      const positionLabel = String(section.headers[4] || "").trim() || "Fueling Position 1";
+      section.rows.forEach((row) => {
+        const product = row.Product || "";
+        const salesCount = row["# of Sales"] || "";
+        const volume = row.Volume || "";
+        const amount = row.Amount || "";
+        if (!product && !salesCount && !volume && !amount) {
+          return;
+        }
+        rows.push({
+          Position: positionLabel,
+          Product: product,
+          "# of Sales": salesCount,
+          Volume: volume,
+          Amount: amount
+        });
+      });
+      continue;
+    }
+
+    if (!/^fueling position \d+$/i.test(title) && !/^product totals$/i.test(title)) {
+      break;
+    }
+
+    section.rows.forEach((row) => {
+      const product = row.Col1 || row.Product || "";
+      const salesCount = row.Col2 || row["# of Sales"] || "";
+      const volume = row.Col3 || row.Volume || "";
+      const amount = row.Col4 || row.Amount || "";
+      if (!product && !salesCount && !volume && !amount) {
+        return;
+      }
+      rows.push({
+        Position: title,
+        Product: product,
+        "# of Sales": salesCount,
+        Volume: volume,
+        Amount: amount
+      });
+    });
+  }
+
+  return rows;
 }
 
 function buildGilbarcoCombinedCsv(report) {
